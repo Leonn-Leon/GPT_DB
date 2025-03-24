@@ -162,7 +162,7 @@ def main():
         "Покажи отгрузки за сегодня"
     ]
     # Запускаем асинхронную задачу для отправки запроса и получения ответа
-    asyncio.run(send_sql_request_to_rabbitmq(user_querys[1], save_dialog=False, dialog_id="2"))
+    asyncio.run(send_sql_request_to_rabbitmq(user_querys[-1], save_dialog=True, dialog_id="2"))
 
 if __name__ == "__main__":
     main()
