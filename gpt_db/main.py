@@ -169,7 +169,7 @@ def main():
     # Запускаем асинхронную задачу для отправки запроса и получения ответа
     for query in user_querys:
         print("ВОПРОС: ", query)
-        asyncio.run(send_sql_request_toa_rabbitmq(query, save_dialog=True, dialog_id="1"))
+        asyncio.run(send_sql_request_to_rabbitmq(query, save_dialog=True, dialog_id="1"))
 
 if __name__ == "__main__":
     main()
