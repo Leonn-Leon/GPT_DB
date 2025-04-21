@@ -29,7 +29,7 @@ examples = [
     },
     {
       "question": "Покажи топ 5 самых дорогих позиций",
-      "answer": "SELECT TOP 5 VBRK_VBELN, VBRP_POSNR, ZAREVENF_RUB FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') ORDER BY ZAREVENF_RUB DESC"
+      "answer": "SELECT TOP 5 VBRK_VBELN, VBRP_POSNR, VBRP_NETWR FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') ORDER BY VBRP_NETWR DESC"
     },
     {
       "question": "Покажи среднюю маржу по позициям",
@@ -53,7 +53,7 @@ examples = [
     },
     {
       "question": "Покажи сумму выручки по каждому каналу сбыта",
-      "answer": "SELECT VBRK_VTWEG, SUM(ZAREVENF_RUB) FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') GROUP BY VBRK_VTWEG"
+      "answer": "SELECT VBRK_VTWEG, SUM(VBRP_NETWR) FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') GROUP BY VBRK_VTWEG"
     },
     {
       "question": "Покажи отгрузку с большим количество позиций",
@@ -83,7 +83,7 @@ examples = [
     },
     {
         "question": "Покажи выручку в уральском и сибирском дивизионе",
-        "answer": "select ZDIV, sum(ZAREVENF_RUB) from ZZSDM_117_CUST where ZDIV in ('02', '04') and VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by ZDIV"
+        "answer": "select ZDIV, sum(VBRP_NETWR) from ZZSDM_117_CUST where ZDIV in ('02', '04') and VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by ZDIV"
     },
 
 
@@ -100,7 +100,7 @@ examples = [
     },
     {
       "question": "В каком месяце 2023 года была самая высокая выручка?",
-      "answer": "SELECT TOP 1 left(VBRK_FKDAT, 6) AS Month, SUM(ZAREVENF_RUB) FROM ZZSDM_117_CUST WHERE left(VBRK_FKDAT, 4) = '2023' GROUP BY left(VBRK_FKDAT, 6) ORDER BY SUM(ZAREVENF_RUB) DESC"
+      "answer": "SELECT TOP 1 left(VBRK_FKDAT, 6) AS Month, SUM(VBRP_NETWR) FROM ZZSDM_117_CUST WHERE left(VBRK_FKDAT, 4) = '2023' GROUP BY left(VBRK_FKDAT, 6) ORDER BY SUM(VBRP_NETWR) DESC"
     },
     {
       "question": "Сколько клиентов отгрузилось в январе?",
@@ -108,35 +108,35 @@ examples = [
     },
     {
         "question": "Покажи распределение выручки по кварталам за 2024 год",
-        "answer": "select QUARTER(VBRK_FKDAT), sum(ZAREVENF_RUB) from ZZSDM_117_CUST where left(VBRK_FKDAT, 4) = '2024' group by quarter(VBRK_FKDAT)"
+        "answer": "select QUARTER(VBRK_FKDAT), sum(VBRP_NETWR) from ZZSDM_117_CUST where left(VBRK_FKDAT, 4) = '2024' group by quarter(VBRK_FKDAT)"
     },
     {
      "question": "Покажи выручку за период января 2023 года по май 2024 года",
-     "answer": "SELECT SUM(ZAREVENF_RUB) FROM ZZSDM_117_CUST WHERE left(VBRK_FKDAT, 6) BETWEEN '202301' AND '202305'"
+     "answer": "SELECT SUM(VBRP_NETWR) FROM ZZSDM_117_CUST WHERE left(VBRK_FKDAT, 6) BETWEEN '202301' AND '202305'"
     },
     {
      "question": "Покажи выручку за второе мая",
-     "answer": "SELECT SUM(ZAREVENF_RUB) FROM ZZSDM_117_CUST WHERE VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYY') || '0502'"
+     "answer": "SELECT SUM(VBRP_NETWR) FROM ZZSDM_117_CUST WHERE VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYY') || '0502'"
     },
     {
      "question": "Покажи выручку за вчера",
-     "answer": "SELECT SUM(ZAREVENF_RUB) FROM ZZSDM_117_CUST WHERE VBRK_FKDAT = to_varchar(add_days(CURRENT_DATE, -1), 'YYYYMMDD')"
+     "answer": "SELECT SUM(VBRP_NETWR) FROM ZZSDM_117_CUST WHERE VBRK_FKDAT = to_varchar(add_days(CURRENT_DATE, -1), 'YYYYMMDD')"
     },
     {
      "question": "Покажи выручку за первый квартал",
-     "answer": "SELECT SUM(ZAREVENF_RUB) FROM ZZSDM_117_CUST WHERE QUARTER(VBRK_FKDAT) = to_varchar(CURRENT_DATE, 'YYYY') || '-Q1'"
+     "answer": "SELECT SUM(VBRP_NETWR) FROM ZZSDM_117_CUST WHERE QUARTER(VBRK_FKDAT) = to_varchar(CURRENT_DATE, 'YYYY') || '-Q1'"
     },
     {
      "question": "Покажи выручку за второй квартал",
-     "answer": "SELECT SUM(ZAREVENF_RUB) FROM ZZSDM_117_CUST WHERE QUARTER(VBRK_FKDAT) = to_varchar(CURRENT_DATE, 'YYYY') || '-Q2'"
+     "answer": "SELECT SUM(VBRP_NETWR) FROM ZZSDM_117_CUST WHERE QUARTER(VBRK_FKDAT) = to_varchar(CURRENT_DATE, 'YYYY') || '-Q2'"
     },
     {
      "question": "Покажи выручку за текущий квартал",
-     "answer": "SELECT SUM(ZAREVENF_RUB) FROM ZZSDM_117_CUST WHERE QUARTER(VBRK_FKDAT) = QUARTER(CURRENT_DATE)"
+     "answer": "SELECT SUM(VBRP_NETWR) FROM ZZSDM_117_CUST WHERE QUARTER(VBRK_FKDAT) = QUARTER(CURRENT_DATE)"
     },
     {
      "question": "Покажи выручку с первого по пятое марта",
-     "answer": "SELECT SUM(ZAREVENF_RUB) FROM ZZSDM_117_CUST WHERE VBRK_FKDAT BETWEEN to_varchar(CURRENT_DATE, 'YYYY') || '0301' AND to_varchar(CURRENT_DATE, 'YYYY') || '0305'"
+     "answer": "SELECT SUM(VBRP_NETWR) FROM ZZSDM_117_CUST WHERE VBRK_FKDAT BETWEEN to_varchar(CURRENT_DATE, 'YYYY') || '0301' AND to_varchar(CURRENT_DATE, 'YYYY') || '0305'"
     },
 
 
