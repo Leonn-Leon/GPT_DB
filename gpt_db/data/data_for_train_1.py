@@ -1,89 +1,102 @@
-#при обучении для каждого примера передавал структуру таблицы и таблицу с кодами-текстами дивизионов (не уверен, что надо так)
-# f"Структура таблицы ZSDM_117: {table_schema}\nCписок кодов и текстов дивизионов (ZDIV) {zdiv}\nВопрос: {ex['question']}\nОтвет: {ex['answer']}<|endoftext|>" for ex in examples)
-
 examples = [
 #простые примеры
     {
-        "question": "Покажи список фактур",
-        "answer": "select distinct VBRK_VBELN from ZSDM_117 where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD')"
-    },
-    {
         "question": "Покажи фактуры",
-        "answer": "select distinct VBRK_VBELN from ZSDM_117 where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD')"
+        "answer": "select distinct VBRK_VBELN from ZSDM_117"
     },
     {
         "question": "Покажи фактуры и позиции",
-        "answer": "select VBRK_VBELN, VBRP_POSNR from ZSDM_117 where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD')"
+        "answer": "select VBRK_VBELN, VBRP_POSNR from ZSDM_117"
+    },
+    {
+        "question": "Покажи отгрузки",
+        "answer": "select distinct VBRK_VBELN, VBRP_POSNR, ZQSHIPTOF  from ZSDM_117"
     },
     {
         "question": "Покажи общую маржинальную прибыль",
-        "answer": "select sum(ZAMARGPRF) from ZSDM_117 where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD')"
+        "answer": "select sum(ZAMARGPRF_RUB) from ZSDM_117"
     },
     {
         "question": "Покажи фактуры и количество позиций",
-        "answer": "SELECT VBRK_VBELN, COUNT(VBRP_POSNR) AS Positions_Count FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') GROUP BY VBRK_VBELN"
+        "answer": "SELECT VBRK_VBELN, COUNT(VBRP_POSNR) AS Positions_Count FROM ZZSDM_117_CUST GROUP BY VBRK_VBELN"
     },
     {
       "question": "Покажи список клиентов",
-      "answer": "SELECT DISTINCT ZCUSTOMER FROM ZZSDM_117_CUST WHERE VBRK_FKDAT = TO_VARCHAR(CURRENT_DATE, 'YYYYMMDD')"
+      "answer": "SELECT DISTINCT ZCUSTOMER FROM ZZSDM_117_CUST"
     },
     {
       "question": "Покажи топ 5 самых дорогих позиций",
-      "answer": "SELECT TOP 5 VBRK_VBELN, VBRP_POSNR, VBRP_NETWR FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') ORDER BY VBRP_NETWR DESC"
+      "answer": "SELECT TOP 5 VBRK_VBELN, VBRP_POSNR, VBRP_NETWR FROM ZZSDM_117_CUST ORDER BY VBRP_NETWR DESC"
     },
     {
       "question": "Покажи среднюю маржу по позициям",
-      "answer": "SELECT AVG(ZAMARGPRF_RUB) AS Avg_Margin FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD')"
+      "answer": "SELECT AVG(ZAMARGPRF_RUB) AS Avg_Margin FROM ZZSDM_117_CUST"
     },
     {
       "question": "Покажи среднюю маржу по фактурам",
-      "answer": "SELECT AVG(ZAMARGPRF_RUB) AS Avg_Margin FROM (select sum(ZAMARGPRF_RUB) from ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by VBRK_VBELN) as t"
+      "answer": "SELECT AVG(ZAMARGPRF_RUB) AS Avg_Margin FROM (select sum(ZAMARGPRF_RUB) from ZZSDM_117_CUST group by VBRK_VBELN) as t"
     },
     {
       "question": "Покажи среднюю маржу по отгрузкам",
-      "answer": "SELECT AVG(ZAMARGPRF_RUB) AS Avg_Margin FROM (select sum(ZAMARGPRF_RUB) from ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by VBRK_VBELN) as t"
+      "answer": "SELECT AVG(ZAMARGPRF_RUB) AS Avg_Margin FROM (select sum(ZAMARGPRF_RUB) from ZZSDM_117_CUST group by VBRK_VBELN) as t"
     },
     {
       "question": "Покажи маржу по отгрузкам",
-      "answer": "SELECT VBRK_VBELN, sum(ZAMARGPRF_RUB) AS Avg_Margin FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by VBRK_VBELN"
+      "answer": "SELECT VBRK_VBELN, sum(ZAMARGPRF_RUB) AS Avg_Margin FROM ZZSDM_117_CUST group by VBRK_VBELN"
     },
     {
       "question": "Покажи отгруженные материалы и их количества в кг",
-      "answer": "SELECT VBRP_MATNR, sum(FKIMG_KG) FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by VBRP_MATNR"
+      "answer": "SELECT VBRP_MATNR, sum(FKIMG_KG) FROM ZZSDM_117_CUST group by VBRP_MATNR"
     },
     {
       "question": "Покажи сумму выручки по каждому каналу сбыта",
-      "answer": "SELECT VBRK_VTWEG, SUM(VBRP_NETWR) FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') GROUP BY VBRK_VTWEG"
+      "answer": "SELECT VBRK_VTWEG, SUM(VBRP_NETWR) FROM ZZSDM_117_CUST GROUP BY VBRK_VTWEG"
     },
     {
       "question": "Покажи отгрузку с большим количество позиций",
-      "answer": "SELECT TOP 1 VBRK_VBELN, count(VBRP_POSNR) FROM ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by VBRK_VBELN ORDER BY count(VBRP_POSNR) DESC"
+      "answer": "SELECT TOP 1 VBRK_VBELN, count(VBRP_POSNR) FROM ZZSDM_117_CUST group by VBRK_VBELN ORDER BY count(VBRP_POSNR) DESC"
     },
 
     {
         "question": "Покажи топ 3 менеджера по количеству отгрузок",
-        "answer": "SELECT TOP 3 VBRK_ZZPERNR_ZM, count(distinct VBRK_VBELN) from ZZSDM_117_CUST where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by VBRK_ZZPERNR_ZM order by count(distinct VBRK_VBELN) desc"
+        "answer": "SELECT TOP 3 VBRK_ZZPERNR_ZM, count(distinct VBRK_VBELN) from ZZSDM_117_CUST group by VBRK_ZZPERNR_ZM order by count(distinct VBRK_VBELN) desc"
     },
 
 
 
 
-#примеры с ограничениями. позже надо добавить ещё примеры с другими текстами (пока знаем только тексты для ZDIV)
+#примеры с ограничениями. 
     {
-        "question": "Покажи количество клиентов в уральском дивизионе",
-        "answer": "select count(distinct ZCUSTOMER) from ZZSDM_117_CUST where ZDIV = '02' and VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD')"
+        "question": "Покажи количество отгруженных клиентов в уральском дивизионе",
+        "answer": "select count(distinct ZCUSTOMER) from ZZSDM_117_CUST where ZDIV = '02' "
     },
     {
         "question": "Покажи количество отгрузок в сибирском дивизионе",
-        "answer": "select count(distinct VBRK_VBELN) from ZZSDM_117_CUST where ZDIV = '04' and VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD')"
+        "answer": "select count(distinct VBRK_VBELN) from ZZSDM_117_CUST where ZDIV = '04' "
     },
     {
         "question": "Покажи отгрузку с максимальной маржинальной прибылью в поволжском дивизионе",
-        "answer": "select TOP 1 VBRK_VBELN, sum(ZAMARGPRF) from ZSDM_117 where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by VBRK_VBELN order by sum(ZAMARGPRF) desc"
+        "answer": "select TOP 1 VBRK_VBELN, sum(ZAMARGPRF_RUB) from ZSDM_117  group by VBRK_VBELN order by sum(ZAMARGPRF_RUB) desc"
     },
     {
         "question": "Покажи выручку в уральском и сибирском дивизионе",
-        "answer": "select ZDIV, sum(VBRP_NETWR) from ZZSDM_117_CUST where ZDIV in ('02', '04') and VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by ZDIV"
+        "answer": "select ZDIV, sum(VBRP_NETWR) from ZZSDM_117_CUST where ZDIV in ('02', '04') group by ZDIV"
+    },
+    {
+        "question": "Покажи количество обычных сделок",
+        "answer": "select count(distinct VBRK_VBELN) from ZZSDM_117_CUST where TYPE_ORDER = 'обычная'"
+    },
+    {
+        "question": "сколько было отгружено по экмпортным сделкам",
+        "answer": "select sum(ZQSHIPTOF) from ZZSDM_117_CUST where TYPE_ORDER = 'экспорт'"
+    },
+    {
+        "question": "сколько было отгружено по категории тмп",
+        "answer": "select sum(ZQSHIPTOF) from ZZSDM_117_CUST where ZPROD_CAT = 'тмп'"
+    },
+    {
+        "question": "сколько b2b клиентов было отгружено",
+        "answer": "select count(distinct ZCUSTOMER) from ZZSDM_117_CUST where BUT000_BPKIND = 'b2b'"
     },
 
 
@@ -145,19 +158,19 @@ examples = [
 # остальные (не вошли в группы)
     {
         "question": "Покажи маржу за текущий месяц по филиалам с кодам 01 и 02",
-        "answer": "select ZCFO1, sum(ZAMARGPRF) from ZSDM_117 where ZCFO in ('01', '02') and left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZCFO1"
+        "answer": "select ZCFO1, sum(ZAMARGPRF_RUB) from ZSDM_117 where ZCFO in ('01', '02') and left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZCFO1"
     },
     {
         "question": "Покажи маржу за месяц по филиалам с кодами 01 и 02",
-        "answer": "select ZCFO1, sum(ZAMARGPRF) from ZSDM_117 where ZCFO in ('01', '02') and left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZCFO1"
+        "answer": "select ZCFO1, sum(ZAMARGPRF_RUB) from ZSDM_117 where ZCFO in ('01', '02') and left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZCFO1"
     },
     {
         "question": "Покажи маржу за прошлый год",
-        "answer": "select sum(ZAMARGPRF) from ZSDM_117 where left(VBRK_FKDAT, 4) = to_varchar(add_year(CURRENT_DATE, -1), 'YYYY')"
+        "answer": "select sum(ZAMARGPRF_RUB) from ZSDM_117 where left(VBRK_FKDAT, 4) = to_varchar(add_year(CURRENT_DATE, -1), 'YYYY')"
     },
     {
         "question": "Покажи отгрузки с максимальной маржинальной прибылью за прошлый месяц",
-        "answer": "select VBRK_VBELN, sum(ZAMARGPRF) from ZSDM_117 where left(VBRK_FKDAT, 6) = to_varchar(add_months(CURRENT_DATE, -1), 'YYYYMM') group by VBRK_VBELN"
+        "answer": "select VBRK_VBELN, sum(ZAMARGPRF_RUB) from ZSDM_117 where left(VBRK_FKDAT, 6) = to_varchar(add_months(CURRENT_DATE, -1), 'YYYYMM') group by VBRK_VBELN"
     },
     {
         "question": "Покажи отгрузки с максимальным количеством позиций в первом месяце этого года",
@@ -165,22 +178,18 @@ examples = [
     },
     {
         "question": "Покажи позицию с самой низкой выручкой за этот месяц",
-        "answer": "select TOP 1 VBRP_POSNR, ZAREVENF from ZSDM_117 where left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') order by count(VBRP_POSNR) asc"
+        "answer": "select TOP 1 VBRP_POSNR, VBRP_NETWR from ZSDM_117 where left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') order by count(VBRP_POSNR) asc"
     },
     {
         "question": "Покажи отгрузку с самой низкой выручкой за этот месяц",
-        "answer": "select TOP 1 VBRK_VBELN, sum(ZAREVENF) from ZSDM_117 where left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by VBRK_VBELN order by sum(ZAREVENF) desc"
+        "answer": "select TOP 1 VBRK_VBELN, sum(VBRP_NETWR) from ZSDM_117 where left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by VBRK_VBELN order by sum(VBRP_NETWR) desc"
     },
     {
         "question": "Покажи выручку и количество фактур за сегодня по всем дивизионам",
-        "answer": "select zdiv, sum(ZAREVENF), count(distinct VBRK_VBELN) from ZSDM_117 where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by zdiv"
+        "answer": "select zdiv, sum(VBRP_NETWR), count(distinct VBRK_VBELN) from ZSDM_117 where VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by zdiv"
     },
     {
-        "question": "Покажи АГ2 с самой низкой маржинальной прибылью",
-        "answer": "select ZPRODH21, sum(ZAMARGPRF), count(distinct VBRK_VBELN) from ZSDM_117 where zdiv = '100' VBRK_FKDAT = to_varchar(CURRENT_DATE, 'YYYYMMDD') group by ZPRODH21 order by sum(ZAMARGPRF) asc"
-    },
-    {
-        "question": "Покажи АГ2 с самой низкой маржинальной прибылью в этом месяце",
-        "answer": "select ZPRODH21, sum(ZAMARGPRF), count(distinct VBRK_VBELN) from ZSDM_117 where zdiv = '100' left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZPRODH21 order by sum(ZAMARGPRF) asc"
+        "question": "Покажи АГ3 с самой высокой средней себестоимостью в этом месяце",
+        "answer": "select TOP 1 ZPRODH31, avg(KONV_KWERT_ZVUC_RUB) from ZSDM_117 where left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZPRODH31 order by avg(KONV_KWERT_ZVUC_RUB) desc"
     },
 ]
