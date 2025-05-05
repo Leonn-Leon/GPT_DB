@@ -87,7 +87,7 @@ examples = [
         "answer": "select count(distinct VBRK_VBELN) from ZZSDM_117_CUST where TYPE_ORDER = 'обычная'"
     },
     {
-        "question": "сколько было отгружено по экмпортным сделкам",
+        "question": "сколько было отгружено по экспортным сделкам",
         "answer": "select sum(ZQSHIPTOF) from ZZSDM_117_CUST where TYPE_ORDER = 'экспорт'"
     },
     {
