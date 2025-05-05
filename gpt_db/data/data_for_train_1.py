@@ -2,19 +2,19 @@ examples = [
 #простые примеры
     {
         "question": "Покажи фактуры",
-        "answer": "select distinct VBRK_VBELN from ZSDM_117"
+        "answer": "select distinct VBRK_VBELN from ZZSDM_117_CUST"
     },
     {
         "question": "Покажи фактуры и позиции",
-        "answer": "select VBRK_VBELN, VBRP_POSNR from ZSDM_117"
+        "answer": "select VBRK_VBELN, VBRP_POSNR from ZZSDM_117_CUST"
     },
     {
         "question": "Покажи отгрузки",
-        "answer": "select distinct VBRK_VBELN, VBRP_POSNR, ZQSHIPTOF  from ZSDM_117"
+        "answer": "select distinct VBRK_VBELN, VBRP_POSNR, ZQSHIPTOF  from ZZSDM_117_CUST"
     },
     {
         "question": "Покажи общую маржинальную прибыль",
-        "answer": "select sum(ZAMARGPRF_RUB) from ZSDM_117"
+        "answer": "select sum(ZAMARGPRF_RUB) from ZZSDM_117_CUST"
     },
     {
         "question": "Покажи фактуры и количество позиций",

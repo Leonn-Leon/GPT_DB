@@ -1,7 +1,7 @@
 import sqlite3
 from sqlglot import parse_one, exp, condition
 
-def apply_restrictions(sql_query, user, report):
+def apply_restrictions(sql_query, user):
     parsed = parse_one(sql_query)
     connection = sqlite3.connect('data/authority.db')
     connection.row_factory = sqlite3.Row
@@ -33,5 +33,5 @@ FROM SAPABAP1.ZZSDM_117_CUS
 WHERE ZDIV = '02' AND substr(VBRK_FKDAT, 1, 6) = '202502'
 GROUP BY DATE;
 """
-    test = apply_restrictions(test_query, 'user1', '7.117')
+    test = apply_restrictions(test_query, 'user1')
     print(test)

@@ -477,7 +477,7 @@ class GPTAgent:
 
         return restricted_sql, restrictions_applied_successfully
 
-    def apply_sql_restrictions(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], bool]]:
+    def _apply_sql_restrictions(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], bool]]:
         """Узел графа для применения ограничений к сгенерированному SQL."""
         print(f"\n--- Узел: apply_sql_restrictions ---")
         current_messages = state['messages']

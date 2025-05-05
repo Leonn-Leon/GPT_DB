@@ -11,9 +11,8 @@ with open('confs/divisions.txt', 'r', encoding='utf-8') as file:
 
 with open('data_for_train_1.jsonl', 'w', encoding='utf-8') as f:
     for ex in examples:
-        new_line = {"messages": [{"role": "system", "content": f"Ты эксперт в SQL и аналитике данных.\n Тебе дана структура таблицы ZSDM_117: {struct_of_zzsdm_117_cust}\nCписок кодов и текстов дивизионов {textes_of_zdiv} "}, 
-                                 {"role": "user", "content": ex["question"]}, 
-                                 {"role": "assistant", "content": ex["answer"]}]}
+        new_line = {"text": f"Ты эксперт в SQL и аналитике данных.\n Тебе дана структура таблицы ZSDM_117_CUST: {struct_of_zzsdm_117_cust}\nCписок кодов и текстов дивизионов {textes_of_zdiv}\n Вопрос: {ex['question']} ", 
+                    "label": ex['answer']}
         new_line_json = json.dumps(new_line, ensure_ascii=False)
         f.write(new_line_json + '\n')
 
