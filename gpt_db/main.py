@@ -2,7 +2,7 @@ import os
 import json
 import datetime
 import yaml
-import sqlite3 # <--- Убедитесь, что импортирован
+import sqlite3 
 import traceback
 from typing import List, Annotated, Union, Dict, Optional
 from typing_extensions import TypedDict
@@ -14,21 +14,11 @@ from langgraph.graph.message import add_messages
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, BaseMessage
 from langchain_gigachat.chat_models import GigaChat
+from dotenv import load_dotenv
 
-# --- SQLGlot Imports ---
-try:
-    from sqlglot import parse_one, condition
-    from sqlglot.errors import ParseError
-    SQLGLOT_AVAILABLE = True
-except ImportError:
-    print("Предупреждение: Библиотека sqlglot не найдена. Функционал ограничений SQL будет недоступен.")
-    print("Установите ее: pip install sqlglot")
-    SQLGLOT_AVAILABLE = False
-    # Определим заглушки, чтобы код не падал при импорте
-    class ParseError(Exception): pass
-    def parse_one(*args, **kwargs): raise NotImplementedError("sqlglot не установлен")
-    def condition(*args, **kwargs): raise NotImplementedError("sqlglot не установлен")
-
+from sqlglot import parse_one, condition
+from sqlglot.errors import ParseError
+SQLGLOT_AVAILABLE = True
 # --- Определение состояния графа ---
 class MessagesState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -54,6 +44,8 @@ class GPTAgent:
                  llm_model: str = "GigaChat-2-Max",
                  llm_temperature: float = 0.01,
                  llm_timeout: int = 600):
+        
+        load_dotenv()
 
         # --- Присваивание атрибутов ---
         self.config_file = config_file
@@ -75,7 +67,8 @@ class GPTAgent:
              print(f"Предупреждение: Файл БД авторизации '{self.authority_db_path}' не найден.")
 
         # --- Загрузка конфигурации и данных ---
-        self.gigachat_credentials, self.db_schema, self.divisions = self._load_config_and_data()
+        self.db_schema, self.divisions = self._load_config_and_data()
+        self.GIGACHAT_CREDENTIALS = os.getenv("GIGACHAT_CREDENTIALS")
 
         # --- Инициализация LLM ---
         self.llm = self._initialize_llm()
@@ -134,11 +127,9 @@ class GPTAgent:
 
     # --- Методы загрузки и инициализации (без изменений) ---
     def _load_config_and_data(self) -> tuple[str, str, str]:
-        # ... (код как в вашем скрипте) ...
         try:
             with open(self.config_file, "r", encoding="utf-8") as f:
-                config = yaml.safe_load(f)
-            gigachat_credentials = config["GIGACHAT_CREDENTIALS"]
+                self.config = yaml.safe_load(f)
         except Exception as e:
             print(f"Ошибка при чтении файла конфигурации '{self.config_file}': {e}")
             raise
@@ -157,13 +148,13 @@ class GPTAgent:
             print(f"Ошибка при чтении файла дивизионов '{self.divisions_file}': {e}")
             raise
 
-        return gigachat_credentials, db_schema, divisions_data
+        return db_schema, divisions_data
 
 
     def _initialize_llm(self) -> GigaChat:
         try:
             llm = GigaChat(
-                credentials=self.gigachat_credentials,
+                credentials=self.GIGACHAT_CREDENTIALS,
                 model=self.llm_model,
                 verify_ssl_certs=False,
                 temperature=self.llm_temperature,
@@ -315,28 +306,11 @@ class GPTAgent:
 
         print(f"Инструкция для генерации SQL: {validated_instruction}")
 
-        sys_msg_content = (
-            "Ты – эксперт по SQL (HANA) и анализу данных. Твоя задача - написать ТОЧНЫЙ и ОПТИМАЛЬНЫЙ SQL-запрос к базе данных SAP HANA.\n"
-            f"ЗАПРОСЫ ИДУТ ТОЛЬКО К ТАБЛИЦЕ: SAPABAP1.ZZSDM_117_CUS\n"
-            f"Её структура:\n{self.db_schema}\n\n"
-            f"Справочник дивизионов (используй коды в запросе):\n{self.divisions}\n\n"
-            f"Сегодняшняя дата: {datetime.date.today().strftime('%Y%m%d')}\n\n"
-            "СТРОГИЕ ПРАВИЛА ГЕНЕРАЦИИ SQL:\n"
-            "1. Используй ТОЛЬКО поля из предоставленной структуры таблицы `SAPABAP1.ZZSDM_117_CUS`.\n"
-            "2. Для полей-характеристик (текстовые, даты, коды) используй `GROUP BY`.\n"
-            "3. Для полей-показателей (числовые: NETWR, FKIMG, ZZACOST, ZZMARG) используй агрегатные функции (`SUM`, `COUNT`, `AVG`). `COUNT(DISTINCT FKNUM)` для подсчета уникальных фактур, `COUNT(DISTINCT KUNNR)` для уникальных клиентов.\n"
-            "4. Даты в `WHERE` указывай ЯВНО в формате 'YYYYMMDD' (например, `WHERE FKDAT = '20231027'`).\n"
-            "5. ОБЯЗАТЕЛЬНО включай фильтр по дате (`FKDAT`). Нельзя запрашивать данные за все время. Если в инструкции период не конкретизирован (например, 'в прошлом месяце'), рассчитай даты сам.\n"
-            "6. Для фильтрации по дивизиону используй поля `ZZDVAN`, `ZZDVAN2`, ..., `ZZDVAN5`. Если указан код дивизиона (например, '100'), используй его в `WHERE` (например, `WHERE ZZDVAN = '100'`). Если указано название (например, 'Урал'), найди соответствующий код в справочнике дивизионов и используй его.\n"
-            "7. При делении (например, для расчета средней цены или наценки) ИСПОЛЬЗУЙ `CASE WHEN <знаменатель> != 0 THEN <числитель> / <знаменатель> ELSE 0 END` для избежания деления на ноль.\n"
-            "8. Формула наценки: `CASE WHEN ZZACOST != 0 THEN (ZZMARG / ZZACOST) * 100 ELSE 0 END`.\n"
-            "9. ЗАПРЕЩЕНО: `SELECT *`, `WITH` (CTE), `NULLIF`, подзапросы (старайся избегать, если возможно).\n"
-            "10. Используй псевдонимы для таблицы (например, `T1`) и для вычисляемых полей (`AS alias_name`).\n"
-            "11. Если не указано иное, предполагай, что нужна сумма (`SUM`) для стоимостных показателей и количества.\n"
-            "12. Если не указано количество записей для вывода, добавь `LIMIT 20`.\n\n"
-            "ЗАДАЧА: На основе инструкции пользователя, напиши ОДИН SQL-запрос.\n"
-            "ОТВЕТ ДОЛЖЕН СОДЕРЖАТЬ ТОЛЬКО SQL-КОД, без каких-либо пояснений ДО или ПОСЛЕ.\n"
-        )
+        sys_msg_content = config["validate_instruction"]
+
+        sys_msg_content = sys_msg_content.replace("<otgruzki_structure>", otgruzki_structure)\
+                                .replace("<divisions>", divisions)\
+                                .replace("<today_date>", datetime.date.today().strftime('%Y%m%d'))
 
         conversation = [
             SystemMessage(content=sys_msg_content),
@@ -644,7 +618,7 @@ class GPTAgent:
         # Добавляем узлы
         workflow.add_node("validate_instruction", self.validate_instruction)
         workflow.add_node("generate_sql_query", self.generate_sql_query)
-        workflow.add_node("apply_sql_restrictions", self.apply_sql_restrictions) # <-- Новый узел
+        workflow.add_node("apply_sql_restrictions", self._apply_sql_restrictions) # <-- Новый узел
         workflow.add_node("comment_sql_query", self.comment_sql_query)
 
         # Определяем точку входа
