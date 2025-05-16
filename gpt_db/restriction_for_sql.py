@@ -3,7 +3,7 @@ from sqlglot import parse_one, exp, condition
 
 def apply_restrictions(sql_query, user):
     parsed = parse_one(sql_query)
-    connection = sqlite3.connect('data/authority.db')
+    connection = sqlite3.connect('data/sqlite.db')
     connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
 
