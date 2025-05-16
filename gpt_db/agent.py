@@ -18,7 +18,6 @@ from dotenv import load_dotenv
 
 from sqlglot import parse_one, condition
 from sqlglot.errors import ParseError
-SQLGLOT_AVAILABLE = True
 # --- Определение состояния графа ---
 class MessagesState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -60,9 +59,6 @@ class GPTAgent:
         self.memory = None # Инициализируем чекпоинтер как None
         self._sqlite_conn = None # Для хранения соединения с БД чекпоинтов
 
-        # --- Проверки доступности ---
-        if not SQLGLOT_AVAILABLE:
-            print("ВНИМАНИЕ: sqlglot не доступен, узел применения ограничений будет пропускаться.")
         if not os.path.exists(self.authority_db_path):
              print(f"Предупреждение: Файл БД авторизации '{self.authority_db_path}' не найден.")
 
@@ -212,23 +208,10 @@ class GPTAgent:
         print(f"\n--- Узел: validate_instruction ---")
         print(f"Получено сообщение: {last_user_message}")
 
-        sys_msg_content = (
-            f"Описание структуры БД:\n{self.db_schema}\n\n"
-            f"Справочник дивизионов:\n{self.divisions}\n"
-            f"Сегодняшняя дата: {datetime.date.today().strftime('%Y%m%d')}\n\n"
-            "Ты ассистент, помогающий сформулировать точный запрос к базе данных отгрузок. Твоя задача - валидировать и уточнять запрос пользователя.\n"
-            "Правила валидации:\n"
-            "1. Проверь, соответствует ли запрос доступным полям в структуре БД. Если пользователь упоминает несуществующие поля, укажи на это.\n"
-            "2. Убедись, что из запроса ЯСНО, какие КОНКРЕТНЫЕ ПОЛЯ (столбцы) нужно вывести. Запрос 'покажи отгрузки' невалиден - нужно уточнить, ЧТО именно показать (например, 'покажи чистую стоимость и количество'). Запрещено выводить все поля (`SELECT *`).\n"
-            "3. Проверь, понятны ли фильтры (даты, дивизионы, клиенты и т.д.). Если период не указан, уточни (нельзя запрашивать данные за все время).\n"
-            "4. Если что-то неясно или не соответствует правилам, задай КОРОТКИЙ уточняющий вопрос. Предлагай варианты, если это уместно (например, 'Уточните, какие поля вывести: количество, стоимость или оба?').\n"
-            "5. Если запрос пользователя ПОЛНОСТЬЮ ясен, точен и соответствует правилам, ответь СТРОГО в формате:\n"
-            "ok\n<Здесь четко сформулированная итоговая инструкция для генерации SQL>\n"
-            f"Пример ответа 'ok':\nok\nПокажи сумму чистой стоимости (NETWR) и количество фактур (FKIMG) для дивизиона '100' за вчерашний день ({datetime.date.today() - datetime.timedelta(days=1):%Y%m%d}).\n"
-            "ВАЖНО: Поле даты ФАКТУРЫ (FKDAT) в таблице ЕСТЬ. Не говори, что его нет.\n"
-            "Отвечай кратко: либо уточняющий вопрос, либо 'ok' с итоговой инструкцией."
-            "Не пиши сам SQL запрос!!!"
-        )
+        sys_msg_content = self.config["validate_instruction"]
+        sys_msg_content = sys_msg_content.replace("<otgruzki_structure>", self.db_schema)\
+                                .replace("<divisions>", self.divisions)\
+                                .replace("<today_date>", datetime.date.today().strftime('%Y%m%d'))
 
         # Используем только текущую историю для LLM в этом узле
         conversation_for_llm = [SystemMessage(content=sys_msg_content)] + current_messages
@@ -293,7 +276,6 @@ class GPTAgent:
                      return output_state
 
     def generate_sql_query(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], str, None]]:
-        # ... (код без изменений, но теперь возвращает только messages) ...
         print(f"\n--- Узел: generate_sql_query ---")
         validated_instruction = state.get('final_instruction')
         # Инициализируем флаг ограничений как False
@@ -306,10 +288,10 @@ class GPTAgent:
 
         print(f"Инструкция для генерации SQL: {validated_instruction}")
 
-        sys_msg_content = config["validate_instruction"]
+        sys_msg_content = self.config["generate_sql_query"]
 
-        sys_msg_content = sys_msg_content.replace("<otgruzki_structure>", otgruzki_structure)\
-                                .replace("<divisions>", divisions)\
+        sys_msg_content = sys_msg_content.replace("<otgruzki_structure>", self.db_schema)\
+                                .replace("<divisions>", self.divisions)\
                                 .replace("<today_date>", datetime.date.today().strftime('%Y%m%d'))
 
         conversation = [
@@ -335,120 +317,94 @@ class GPTAgent:
 
     # --- Новый узел и его логика для применения ограничений ---
     def _apply_sql_restrictions_logic(self, sql_query: str, user: str, report: str) -> tuple[str, bool]:
-        """
-        Применяет ограничения доступа к SQL-запросу.
-        Возвращает кортеж: (модифицированный_sql, были_ли_применены_ограничения_успешно).
-        """
-        zvobj = ''
-        auth = ''
-        restricted_sql = sql_query # По умолчанию возвращаем исходный запрос
-        restrictions_applied_successfully = False # Флаг успеха
+        restricted_sql = sql_query
+        restrictions_applied_successfully = False
 
-        if not SQLGLOT_AVAILABLE:
-            print("Пропуск применения ограничений: sqlglot не установлен.")
-            return restricted_sql, restrictions_applied_successfully
+        # Проверка SQLGLOT_AVAILABLE должна быть в вызывающем методе _apply_sql_restrictions,
+        # как это было в вашем оригинальном коде. Если здесь, то:
+        # if not SQLGLOT_AVAILABLE:
+        #     print("Пропуск применения ограничений: sqlglot не установлен.")
+        #     return restricted_sql, restrictions_applied_successfully
 
         if not user or not report:
-            print("Предупреждение: user_id или report_id не предоставлены для применения ограничений.")
             return sql_query, restrictions_applied_successfully
 
-        if not os.path.exists(self.authority_db_path):
-             print(f"Ошибка: Файл БД авторизации '{self.authority_db_path}' не найден. Ограничения не применены.")
-             return sql_query, restrictions_applied_successfully
+        if not os.path.exists(self.authority_db_path): # self.authority_db_path теперь путь к CSV
+            return sql_query, restrictions_applied_successfully
 
+        auth_rules = []
         try:
-            connection = sqlite3.connect(self.authority_db_path)
-            connection.row_factory = sqlite3.Row
-            cursor = connection.cursor()
+            with open(self.authority_db_path, mode='r', encoding='utf-8', newline='') as csvfile:
+                reader = csv.DictReader(csvfile, delimiter=';') # Разделитель ; колонки zuser, zvobj, auth
+                for row in reader:
+                    auth_rules.append(row)
+        except Exception: # Ошибка чтения/парсинга CSV
+            return sql_query, restrictions_applied_successfully
 
-            # Запрос для поиска наиболее специфичного правила
-            # Используем стандартный LIKE с '%'
-            # Сортируем по длине zvobj DESC, чтобы самое специфичное правило было первым
-            # Добавляем условие WHERE zuser = ? для безопасности
-            cursor.execute(
-                """
-                SELECT zvobj, auth
-                FROM ZARM_AUTH_CFO
-                WHERE zuser = ? AND (
-                    zvobj = ?
-                    OR (? LIKE zvobj || '%' AND zvobj LIKE '7%') -- Обрабатываем '7*' как '7%'
-                    OR zvobj = '*'
-                )
-                ORDER BY LENGTH(zvobj) DESC
-                LIMIT 1
-                """,
-                (user, report, report) # Передаем user и report дважды для плейсхолдеров
-            )
-            best_match = cursor.fetchone()
-            connection.close()
+        best_match_auth_condition = None
+        # Уровни специфичности: 2 (точное), 1 (префикс '7'), 0 ('*'), -1 (нет)
+        current_best_specificity_level = -1
+        current_best_prefix_len = -1 # Для сравнения длины zvobj у префиксных правил '7'
 
-            if best_match:
-                auth = best_match['auth']
-                print(f"Найдены права для user='{user}', report='{report}': auth='{auth}' (zvobj='{best_match['zvobj']}')")
-            else:
-                 print(f"Права для user='{user}', report='{report}' не найдены. Применяется запрет (1=2).")
-                 auth = '1 = 2' # Если прав нет совсем
+        for rule in auth_rules:
+            if rule.get('zuser') == user:
+                rule_zvobj = rule.get('zvobj', '')
+                rule_auth = rule.get('auth', '') # Получаем auth из правила
 
-            # Если auth пустой или null из БД, тоже применяем запрет
-            if not auth:
-                print(f"Строка прав найдена, но поле 'auth' пустое или NULL. Применяется запрет (1=2).")
-                auth = '1 = 2'
+                if not rule_auth: # Пропускаем правила с пустым auth
+                    continue
 
-            # --- Применение ограничения с помощью sqlglot ---
+                specificity_level = -1
+                prefix_len = 0
+
+                if rule_zvobj == report: # 1. Точное совпадение
+                    specificity_level = 2
+                # 2. Префиксное правило "начинается с 7"
+                elif rule_zvobj and report.startswith(rule_zvobj) and rule_zvobj.startswith('7'):
+                    specificity_level = 1
+                    prefix_len = len(rule_zvobj)
+                elif rule_zvobj == '*': # 3. Общее правило '*'
+                    specificity_level = 0
+                
+                # Обновление лучшего совпадения на основе уровня специфичности и длины префикса
+                if specificity_level > current_best_specificity_level:
+                    current_best_specificity_level = specificity_level
+                    best_match_auth_condition = rule_auth
+                    if specificity_level == 1: # Если это префиксное правило
+                        current_best_prefix_len = prefix_len
+                elif specificity_level == 1 and current_best_specificity_level == 1: # Оба префиксные
+                    if prefix_len > current_best_prefix_len: # Выбираем более длинный (более специфичный) префикс
+                        best_match_auth_condition = rule_auth
+                        current_best_prefix_len = prefix_len
+        
+        auth_to_apply = "1 = 2" # По умолчанию запрет, если подходящих прав не найдено или они некорректны
+        if best_match_auth_condition: # Если найдено правило и его auth не пустое
+            auth_to_apply = best_match_auth_condition
+        
+        # --- Применение ограничения с помощью sqlglot ---
+        try:
+            if ';' in auth_to_apply: # Простая проверка безопасности для строки auth
+                return sql_query, restrictions_applied_successfully 
+
             try:
-                # !!! ВАЖНО: Валидация строки auth перед использованием !!!
-                # Простая проверка: не содержит ли точка с запятой (примитивная защита от инъекций)
-                if ';' in auth:
-                    print(f"ОШИБКА БЕЗОПАСНОСТИ: Строка прав '{auth}' содержит ';'. Ограничения не применены.")
-                    # Можно вернуть исходный SQL или специальную ошибку
-                    return sql_query, restrictions_applied_successfully
+                # Проверка, парсится ли условие auth (диалект можно указать, если известен)
+                parse_one(f"SELECT * FROM dummy WHERE {auth_to_apply}")
+            except (ParseError, Exception): # Если условие auth невалидно
+                auth_to_apply = '1 = 2' # Применяем запрет
 
-                # Пытаемся распарсить сам auth как условие WHERE (дополнительная проверка)
-                try:
-                    # Указываем диалект вашей основной БД (например, 'hana', 'sqlite', 'postgres')
-                    # Если не указать, sqlglot попытается угадать
-                    parse_one(f"SELECT * FROM dummy WHERE {auth}")
-                    print(f"Строка прав '{auth}' успешно распарсена как условие.")
-                except ParseError as e_auth:
-                    print(f"ОШИБКА ПАРСИНГА ПРАВ: Не удалось распарсить строку прав '{auth}' как валидное SQL условие: {e_auth}")
-                    print("Применяется запрет (1=2) из-за невалидных прав.")
-                    auth = '1 = 2' # Применяем запрет, если правило некорректно
-                except Exception as e_auth_other:
-                     print(f"Неожиданная ошибка при парсинге прав '{auth}': {e_auth_other}")
-                     print("Применяется запрет (1=2) из-за ошибки.")
-                     auth = '1 = 2'
+            # Парсим основной SQL-запрос (диалект можно указать, если известен, например, read='hana')
+            parsed_sql_obj = parse_one(sql_query) 
+            restriction_obj = condition(auth_to_apply)
+            
+            parsed_sql_obj = parsed_sql_obj.where(restriction_obj) 
+            # Генерируем SQL (диалект можно указать, если известен, например, dialect='hana')
+            restricted_sql = parsed_sql_obj.sql(pretty=True) 
+            restrictions_applied_successfully = True
 
-                # Парсим основной SQL-запрос
-                parsed = parse_one(sql_query) # Укажите диалект вашей БД (HANA)
-
-                # Создаем условие из (потенциально скорректированной) строки auth
-                where_condition = condition(auth)
-
-                # Добавляем условие через AND к существующему WHERE или создаем WHERE
-                parsed_with_restriction = parsed.where(where_condition) # copy=False для модификации на месте
-                restricted_sql = parsed_with_restriction.sql(pretty=True, identify=True) # Указываем диалект для вывода
-                print(f"SQL после применения ограничений:\n{restricted_sql}")
-                restrictions_applied_successfully = True # Успешно применили
-
-            except ParseError as e_parse:
-                print(f"Ошибка парсинга основного SQL библиотекой sqlglot: {e_parse}")
-                print(f"Исходный SQL:\n{sql_query}")
-                print("Ограничения не применены к SQL из-за ошибки парсинга.")
-                # Возвращаем исходный SQL
-            except Exception as e_sqlglot:
-                 print(f"Неожиданная ошибка при модификации SQL с помощью sqlglot: {e_sqlglot}")
-                 traceback.print_exc()
-                 # Возвращаем исходный SQL
-
-        except sqlite3.Error as e_sqlite:
-            print(f"Ошибка при доступе к БД авторизации '{self.authority_db_path}': {e_sqlite}")
-            print("Ограничения не применены из-за ошибки БД.")
-            # Возвращаем исходный SQL
-        except Exception as e:
-            print(f"Неожиданная ошибка в _apply_sql_restrictions_logic: {e}")
-            traceback.print_exc()
-            # Возвращаем исходный SQL
-
+        except (ParseError, Exception): # Любые ошибки при работе с sqlglot
+            # Ограничения не применены, возвращаем исходный SQL и False
+            pass 
+        
         return restricted_sql, restrictions_applied_successfully
 
     def _apply_sql_restrictions(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], bool]]:
@@ -459,10 +415,6 @@ class GPTAgent:
         report_id = state.get('report_id')
         # Инициализируем выходное состояние
         output_state = {"messages": current_messages, "restrictions_applied": False}
-
-        if not SQLGLOT_AVAILABLE:
-            print("Пропуск узла: sqlglot не установлен.")
-            return output_state # Возвращаем состояние без изменений
 
         # Ищем последний AIMessage, который должен содержать SQL
         sql_query = ""
@@ -562,29 +514,13 @@ class GPTAgent:
         print(f"На основе инструкции: {final_instruction}")
         print(f"Ограничения применены: {restrictions_applied}")
 
-        sys_msg_content =(
-            "Ты - ассистент, который объясняет пользователю, что покажет результат выполненного SQL-запроса.\n"
-            "Пользователь НЕ ВИДИТ сам SQL-запрос.\n"
-            "Твоя задача - на основе ИНСТРУКЦИИ пользователя и сгенерированного SQL-ЗАПРОСА написать ПОНЯТНЫЙ комментарий.\n\n"
-            "Правила для комментария:\n"
-            "1. Начни с фразы, описывающей, ЧТО будет показано (например, 'Хорошо, я покажу...', 'Результат покажет...', 'Вот данные о...').\n"
-            "2. Перечисли ПОЛЯ, которые выводятся в `SELECT` части SQL-запроса. Используй понятные названия или псевдонимы из SQL (например, '...общую чистую стоимость (total_net_value) и количество фактур (invoice_count)...'). НЕ используй `<placeholder>`.\n"
-            "3. Укажи КЛЮЧЕВЫЕ ФИЛЬТРЫ из `WHERE` части SQL: период дат (например, '...за период с 2023-10-01 по 2023-10-31'), дивизион (например, '...для дивизиона 'Урал' (код 200)'), и другие важные условия.\n"
-            "4. Если использовались ФОРМУЛЫ (например, расчет наценки), кратко упомяни это (например, '...также будет рассчитана наценка').\n"
-            "5. Если есть `GROUP BY`, укажи, по каким полям сгруппированы данные (например, '...с группировкой по материалам').\n"
-            "6. Если есть `LIMIT`, упомяни ограничение (например, '...будут показаны первые 20 записей').\n"
-            "7. Говори в настоящем или будущем времени ('Запрос покажет...', 'Вы увидите...').\n"
-            "8. Будь краток, понятен и дружелюбен. Не используй технический жаргон, кроме названий полей из SELECT.\n"
-            "9. НЕ включай сам SQL-запрос в ответ.\n"
-            "10. Если к запросу были применены ограничения доступа (флаг restrictions_applied=True), добавь в конце фразу типа: '(Результаты показаны с учетом ваших прав доступа.)'\n\n" # <-- Добавлено правило 10
-            "ЗАДАЧА: Сформируй итоговый комментарий для пользователя."
-        )
+        sys_msg_content = self.config["comment_sql_query"]
 
         human_msg_content = (
-            f"Инструкция пользователя (на основе которой генерировался SQL):\n{final_instruction}\n\n"
-            f"Сгенерированный SQL (возможно, с ограничениями):\n{sql_query}\n\n"
-            f"Флаг применения ограничений (restrictions_applied): {restrictions_applied}\n\n" # <-- Передаем флаг в промпт
-            "Напиши комментарий для пользователя согласно правилам."
+            f"Вопрос пользователя:\n{final_instruction}\n\n"
+            f"Структура данных, которые будут извлечены для ответа (используй алиасы из этой структуры как плейсхолдеры <Алиас>, а условия WHERE для контекста ответа):\n{sql_query}\n\n"
+            f"Флаг применения ограничений видимости (restrictions_applied): {restrictions_applied}\n\n"
+            "Сгенерируй шаблон ответа для пользователя согласно правилам из системной инструкции. Шаблон должен содержать плейсхолдеры в угловых скобках, соответствующие алиасам из предоставленной структуры."
         )
 
         conversation = [
@@ -601,7 +537,7 @@ class GPTAgent:
             # Мы хотим, чтобы финальным сообщением был именно комментарий
             # SQL-запрос уже есть в истории сообщений state['messages'][-1]
             # Поэтому возвращаем только комментарий
-            output_state["messages"] = [AIMessage(content=comment)]
+            output_state["messages"] = [AIMessage(content=sql_query+"\n"+"="*3+"\n"+comment)]
         except Exception as e:
             print(f"Ошибка при вызове LLM в comment_sql_query: {e}")
             # Возвращаем сообщение об ошибке вместо комментария
