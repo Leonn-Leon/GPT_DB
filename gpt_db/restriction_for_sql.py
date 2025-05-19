@@ -1,9 +1,12 @@
 import sqlite3
 from sqlglot import parse_one, exp, condition
+from pathlib import Path
+
+path_to_db = Path(__file__).parent / 'data' / 'sqlite.db'
 
 def apply_restrictions(sql_query, user):
     parsed = parse_one(sql_query)
-    connection = sqlite3.connect('data/sqlite.db')
+    connection = sqlite3.connect(path_to_db)
     connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
 
