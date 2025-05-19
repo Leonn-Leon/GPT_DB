@@ -22,7 +22,7 @@ examples = [
     },
     {
       "question": "Покажи список клиентов",
-      "answer": "SELECT DISTINCT ZCUSTOMER, ZCUSTOMER_TXT FROM ZZSDM_117_CUST LEFT JOIN ZCUSTOMER ON ZCUSTOMER.ZCUSTOMER = ZZSDM_117_CUST.ZCUSTOMER",
+      "answer": "SELECT DISTINCT ZCUSTOMER, ZCUSTOMER_TXT FROM ZZSDM_117_CUST",
       "comment": "Список уникальных клиентов <ZCUSTOMER_TXT>:"
     },
     {
@@ -58,7 +58,7 @@ examples = [
 
     {
         "question": "Покажи топ 3 менеджера по количеству отгрузок",
-        "answer": "SELECT TOP 3 VBRK_ZZPERNR_ZM, VBRK_ZZPERNR_ZM_TXT, count(distinct VBRK_VBELN) from ZZSDM_117_CUST LEFT JOIN VBRK_ZZPERNR_ZM ON VBRK_ZZPERNR_ZM.VBRK_ZZPERNR_ZM = ZZSDM_117_CUST.VBRK_ZZPERNR_ZM group by VBRK_ZZPERNR_ZM, VBRK_ZZPERNR_ZM_TXT order by count(distinct VBRK_VBELN) desc",
+        "answer": "SELECT TOP 3 VBRK_ZZPERNR_ZM, VBRK_ZZPERNR_ZM_TXT, count(distinct VBRK_VBELN) from ZZSDM_117_CUST group by VBRK_ZZPERNR_ZM, VBRK_ZZPERNR_ZM_TXT order by count(distinct VBRK_VBELN) desc",
         "comment": "Список из 3 менеджеров <VBRK_ZZPERNR_ZM_TXT> по количеству отгрузок:"
     },
 
@@ -68,37 +68,37 @@ examples = [
 #примеры с ограничениями. 
     {
         "question": "Покажи количество отгруженных клиентов в уральском дивизионе",
-        "answer": "select count(distinct ZCUSTOMER) from ZZSDM_117_CUST LEFT JOIN ZCUSTOMER ON ZDIV.ZDIV = ZZSDM_117_CUST.ZDIV where UPPER(ZDIV_TXT) LIKE 'УРАЛЬСКИЙ%ДИВИЗИОН'",
+        "answer": "select count(distinct ZCUSTOMER) from ZZSDM_117_CUST ZDIV = '02'",
         "comment": "Список отгруженных клиентов <ZCUSTOMER> в уральском дивизионе:"
     },
     {
         "question": "Покажи количество отгруженных клиентов в филиале спк Владивосток",
-        "answer": "select count(distinct ZCUSTOMER) from ZZSDM_117_CUST LEFT JOIN ZCUSTOMER ON ZCFO1.ZCFO1 = ZZSDM_117_CUST.ZCFO1 where UPPER(ZCFO1_TXT) LIKE 'СПК%ВЛАДИВОСТОК'",
+        "answer": "select count(distinct ZCUSTOMER) from ZZSDM_117_CUST ZCFO1 = '0601'",
         "comment": "Список отгруженных клиентов <ZCUSTOMER> в филиале спк Владивосток:"
     },
     {
         "question": "Покажи количество отгрузок в сибирском дивизионе",
-        "answer": "select count(distinct VBRK_VBELN) from ZZSDM_117_CUSTT LEFT JOIN ZCUSTOMER ON ZDIV.ZDIV = ZZSDM_117_CUST.ZDIV where UPPER(ZDIV_TXT) LIKE 'СИБИРСКИЙ%ДИВИЗИОН' ",
+        "answer": "select count(distinct VBRK_VBELN) from ZZSDM_117_CUST ZDIV = '04' ",
         "comment": "Список фактур <VBRK_VBELN> в сибирском дивизионе:"
     },
     {
         "question": "Покажи количество отгрузок в филиале смц иркутск",
-        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUSTT LEFT JOIN ZCUSTOMER ON ZCFO1.ZCFO1 = ZZSDM_117_CUST.ZCFO1 where UPPER(ZCFO1_TXT) LIKE 'СМЦ%ИРКУТСК' ",
+        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUST WHERE ZCFO1 = '1002' ",
         "comment": "В филиале СМЦ Иркутск было <COUNT_OF_VBRK_VBELN> отгрузок"
     },
     {
         "question": "Покажи отгрузку с максимальной маржинальной прибылью в поволжском дивизионе",
-        "answer": "select TOP 1 VBRK_VBELN, sum(ZAMARGPRF_RUB) as ZAMARGPRF_RUB from ZZSDM_117_CUST LEFT JOIN ZCUSTOMER ON ZDIV.ZDIV = ZZSDM_117_CUST.ZDIV where UPPER(ZDIV_TXT) LIKE 'ПОВОЛЖСКИЙ%ДИВИЗИОН' group by VBRK_VBELN order by sum(ZAMARGPRF_RUB) desc",
+        "answer": "select TOP 1 VBRK_VBELN, sum(ZAMARGPRF_RUB) as ZAMARGPRF_RUB from ZZSDM_117_CUST ZDIV = '03' group by VBRK_VBELN order by sum(ZAMARGPRF_RUB) desc",
         "comment": "Отгрузка <VBRK_VBELN> имеет маржинальную прибыль <ZAMARGPRF_RUB>. Это самая большая маржинальная прибыль у отгрузки в Поволжском дивизионе "
     },
     {
         "question": "Покажи выручку в уральском и сибирском дивизионе",
-        "answer": "select ZDIV, ZDIV_TXT sum(VBRP_NETWR) from ZZSDM_117_CUST LEFT JOIN ZCUSTOMER ON ZDIV.ZDIV = ZZSDM_117_CUST.ZDIV where (UPPER(ZDIV_TXT) LIKE 'СИБИРСКИЙ%ДИВИЗИОН' OR UPPER(ZDIV_TXT) LIKE 'УРАЛЬСКИЙ%ДИВИЗИОН') group by ZDIV, ZDIV_TXT",
+        "answer": "select ZDIV, ZDIV_TXT sum(VBRP_NETWR) from ZZSDM_117_CUST WHERE ZDIV in ('02', '04') group by ZDIV, ZDIV_TXT",
         "comment": "Список выручки <VBRP_NETWR> по Уральскому и Сибирскому дивизионам"
     },
     {
         "question": "Покажи выручку в филиалах смц Абакан и спк Абакан",
-        "answer": "select ZCFO1, ZCFO1_TXT sum(VBRP_NETWR) from ZZSDM_117_CUST LEFT JOIN ZCUSTOMER ON ZCFO1.ZCFO1 = ZZSDM_117_CUST.ZCFO1 where (UPPER(ZCFO1_TXT) LIKE 'СМЦ%АБАКАН' OR UPPER(ZCFO1_TXT) LIKE 'СПК%АБАКАН') group by ZCFO1, ZCFO1_TXT",
+        "answer": "select ZCFO1, ZCFO1_TXT sum(VBRP_NETWR) from ZZSDM_117_CUST WHERE ZCFO1 in ('0201', '0202') group by ZCFO1, ZCFO1_TXT",
         "comment": "Список выручки <VBRP_NETWR> по филиалам смц Абакан и спк Абакан"
     },
     {
@@ -118,7 +118,7 @@ examples = [
     },
     {
         "question": "сколько было отгружено по категории материала тмп",
-        "answer": "select sum(ZQSHIPTOF) as ZQSHIPTOF from ZZSDM_117_CUST LEFT JOIN ZCUSTOMER ON ZPROD_CAT.ZPROD_CAT = ZZSDM_117_CUST.ZPROD_CAT where UPPER(ZPROD_CAT_TXT) = 'ТМП'",
+        "answer": "select sum(ZQSHIPTOF) as ZQSHIPTOF from ZZSDM_117_CUST where ZPROD_CAT = '02'",
         "comment": "Было отгружено <ZQSHIPTOF> тонн по экспортным сделкам"
     },
     {
@@ -128,37 +128,37 @@ examples = [
     },
     {
         "question": "покажи общую выручку по отрасли машиностроение по филиалу спк екатеринбург",
-        "answer": "select sum(VBRP_NETWR) as VBRP_NETWR from ZZSDM_117_CUST LEFT JOIN ZCUSTOMER ON INDUSTRY.INDUSTRY = ZZSDM_117_CUST.INDUSTRY LEFT JOIN ZCUSTOMER ON ZCFO1.ZCFO1 = ZZSDM_117_CUST.ZCFO1 where UPPER(INDUSTRY_TXT) = 'МАШИНОСТРОЕНИЕ' and UPPER(ZCFO1_TXT) = 'СПК%ЕКАТЕРИНБУРГ'",
+        "answer": "select sum(VBRP_NETWR) as VBRP_NETWR from ZZSDM_117_CUST WHERE INDUSTRY = '32' and ZCFO1 = '0802'",
         "comment": "Общая выручка по отрасли машиностроение по филиалу спк екатеринбург составила <VBRP_NETWR>"
     },
     {
         "question": "сколько было отгрузок в 2024 году у менеджера Наумовой Ольги Павловны?",
-        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUST LEFT JOIN VBRK_ZZPERNR_ZM ON VBRK_ZZPERNR_ZM.VBRK_ZZPERNR_ZM = ZZSDM_117_CUST.VBRK_ZZPERNR_ZM where UPPER(VBRK_ZZPERNR_ZM_TXT) LIKE 'НАУМОВА%ОЛЬГА%ПАВЛОВНА' and left(VBRK_FKDAT, 4) = '2024'",
+        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUST where VBRK_ZZPERNR_ZM = '20' and left(VBRK_FKDAT, 4) = '2024'",
         "comment": "В 2024 году у менеджера Наумовой Ольги Павловны было <COUNT_OF_VBRK_VBELN> отгрузок"
     },
     {
         "question": "сколько было отгрузок в 2024 году у менеджера Барышниковой Натальи Андреевны?",
-        "answer": "select count(distinct VBRK_VBELN) from ZZSDM_117_CUST LEFT JOIN VBRK_ZZPERNR_ZM ON VBRK_ZZPERNR_ZM.VBRK_ZZPERNR_ZM = ZZSDM_117_CUST.VBRK_ZZPERNR_ZM where UPPER(VBRK_ZZPERNR_ZM_TXT) LIKE 'БАРЫШНИКОВА%НАТАЛЬЯ%АНДРЕЕВНА' and left(VBRK_FKDAT, 4) = '2024'",
+        "answer": "select count(distinct VBRK_VBELN) from ZZSDM_117_CUST where VBRK_ZZPERNR_ZM = '20' and left(VBRK_FKDAT, 4) = '2024'",
         "comment": "В 2024 году у менеджера Барышниковой Натальи Андреевны было <COUNT_OF_VBRK_VBELN> отгрузок"
     },
     {
         "question": "сколько было отгрузок с иерархией нулевого уровня трубой?",
-        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUST LEFT JOIN ZPRODH01 ON ZPRODH01.ZPRODH01 = ZZSDM_117_CUST.ZPRODH01 where UPPER(ZPRODH01_TXT) LIKE 'ТРУБА'",
+        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUST where ZPRODH01 = '20",
         "comment": "С иерархией нулевого уровня трубой было <COUNT_OF_VBRK_VBELN> отгрузок"
     },
     {
         "question": "сколько было отгрузок с иерархией первого уровня Труба Б Ш?",
-        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUST LEFT JOIN ZPRODH11 ON ZPRODH11.ZPRODH11 = ZZSDM_117_CUST.ZPRODH11 where UPPER(ZPRODH11_TXT) LIKE 'ТРУБА%Б%Ш'",
+        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUST where ZPRODH11 = '20'",
         "comment": "С иерархией первого уровня Трубой Б Ш было <COUNT_OF_VBRK_VBELN> отгрузок"
     },
     {
         "question": "сколько было отгрузок с иерархией второго уровня Арматурой 32?",
-        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUST LEFT JOIN ZPRODH21 ON ZPRODH21.ZPRODH21 = ZZSDM_117_CUST.ZPRODH21 where UPPER(ZPRODH21_TXT) LIKE 'АРМАТУРА%32'",
+        "answer": "select count(distinct VBRK_VBELN) as COUNT_OF_VBRK_VBELN from ZZSDM_117_CUST where ZPRODH21 = '20'",
         "comment": "С иерархией второго уровня Арматурой 32 было <COUNT_OF_VBRK_VBELN> отгрузок"
     },
     {
         "question": "когда была первая отгрузка клиента крепёжные системы?",
-        "answer": "select min(VBRK_FKDAT) as VBRK_FKDAT from ZZSDM_117_CUST LEFT JOIN ZCUSTOMER ON ZCUSTOMER.ZCUSTOMER = ZZSDM_117_CUST.ZCUSTOMER where UPPER(ZCUSTOMER_TXT) LIKE '%КРЕПЁЖНЫЕ%СИСТЕМЫ%'",
+        "answer": "select min(VBRK_FKDAT) as VBRK_FKDAT from ZZSDM_117_CUST where ZCUSTOMER = '20'",
         "comment": "Первая отгрузка клиента крепёжные системы была <VBRK_FKDAT>"
     },
     {
@@ -240,7 +240,7 @@ examples = [
 # остальные (не вошли в группы)
     {
         "question": "Покажи маржу за текущий месяц по филиалам СПК-Казань и СМЦ-Иркутск",
-        "answer": "select ZCFO1, ZCFO1_TXT, sum(ZAMARGPRF_RUB) from ZZSDM_117_CUST LEFT JOIN ZCFO1 ON ZCFO1.ZCFO1 = ZZSDM_117_CUST.ZCFO1 where (UPPER(ZCFO1_TXT) like '%СПК%КАЗАНЬ%' or UPPER(ZCFO1_TXT) like '%СПК%ИРКУТСК%') and left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZCFO1, ZCFO1_TXT",
+        "answer": "select ZCFO1, ZCFO1_TXT, sum(ZAMARGPRF_RUB) from ZZSDM_117_CUST ZCFO1 in ('1002', '1101') and left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZCFO1, ZCFO1_TXT",
         "comment": "Список маржинальной прибыли <ZAMARGPRF_RUB> по филиалам СПК-Казань и СМЦ-Иркутск за текущий месяц:"
     },
     {
@@ -275,7 +275,7 @@ examples = [
     },
     {
         "question": "Покажи АГ3 с самой высокой средней себестоимостью в этом месяце",
-        "answer": "select TOP 1 ZPRODH31, ZPRODH31_TXT, avg(KONV_KWERT_ZVUC_RUB) as KONV_KWERT_ZVUC_RUB from ZZSDM_117_CUST LEFT JOIN ZPRODH31 ON ZPRODH31.ZPRODH31 = ZZSDM_117_CUST.ZPRODH31 where left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZPRODH31, ZPRODH31_TXT order by avg(KONV_KWERT_ZVUC_RUB) desc",
+        "answer": "select TOP 1 ZPRODH31, ZPRODH31_TXT, avg(KONV_KWERT_ZVUC_RUB) as KONV_KWERT_ZVUC_RUB from ZZSDM_117_CUST where left(VBRK_FKDAT, 6) = to_varchar(CURRENT_DATE, 'YYYYMM') group by ZPRODH31, ZPRODH31_TXT order by avg(KONV_KWERT_ZVUC_RUB) desc",
         "comment": "АГ3 <ZPRODH31> имеет среднюю себестоимость <KONV_KWERT_ZVUC_RUB>. Это самая высокая средняя себестоимость для АГ3 в текущем месяце"
     },
 ]
