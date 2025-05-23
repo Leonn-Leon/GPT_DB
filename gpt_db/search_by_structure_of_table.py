@@ -12,7 +12,7 @@ db.enable_load_extension(False)
 model = SentenceTransformer('cointegrated/rubert-tiny2')
 path_to_yaml = Path(__file__).parent / 'data' / 'confs' / 'otgruzki_structure.yaml'
 
-def search_by_referenses(strings) -> dict[str, list[tuple[str, str, float]]]:
+def search_by_structure_of_table(strings) -> dict[str, list[tuple[str, str, float]]]:
     """
     Example of return:
     {
@@ -40,4 +40,4 @@ def search_by_referenses(strings) -> dict[str, list[tuple[str, str, float]]]:
 
 if __name__ == "__main__":
     test_query = ['менеджер за сделку', 'Маржа ССЦ за позицию']
-    print(search_by_referenses(test_query))
+    print(search_by_structure_of_table(test_query))
