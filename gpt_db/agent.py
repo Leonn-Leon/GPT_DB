@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 
 from sqlglot import parse_one, condition
 from sqlglot.errors import ParseError
+
+from gpt_db.restriction_for_sql import apply_restrictions
 # --- Определение состояния графа ---
 class MessagesState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -39,7 +41,6 @@ class GPTAgent:
                  divisions_file: str = 'gpt_db/data/confs/divisions.txt',
                  base_history_file: str = "history_base.json",
                  checkpoint_db: str = "checkpoints.sqlite",
-                 authority_db_path: str = 'data/authority.db',
                  llm_model: str = "GigaChat-2-Max",
                  llm_temperature: float = 0.01,
                  llm_timeout: int = 600):
@@ -52,15 +53,11 @@ class GPTAgent:
         self.divisions_file = divisions_file
         self.base_history_file = base_history_file
         self.checkpoint_db = checkpoint_db
-        self.authority_db_path = authority_db_path
         self.llm_model = llm_model
         self.llm_temperature = llm_temperature
         self.llm_timeout = llm_timeout
         self.memory = None # Инициализируем чекпоинтер как None
         self._sqlite_conn = None # Для хранения соединения с БД чекпоинтов
-
-        if not os.path.exists(self.authority_db_path):
-             print(f"Предупреждение: Файл БД авторизации '{self.authority_db_path}' не найден.")
 
         # --- Загрузка конфигурации и данных ---
         self.db_schema, self.divisions = self._load_config_and_data()
@@ -315,98 +312,6 @@ class GPTAgent:
 
         return output_state # Возвращаем только сообщения и флаг по умолчанию
 
-    # --- Новый узел и его логика для применения ограничений ---
-    def _apply_sql_restrictions_logic(self, sql_query: str, user: str, report: str) -> tuple[str, bool]:
-        restricted_sql = sql_query
-        restrictions_applied_successfully = False
-
-        # Проверка SQLGLOT_AVAILABLE должна быть в вызывающем методе _apply_sql_restrictions,
-        # как это было в вашем оригинальном коде. Если здесь, то:
-        # if not SQLGLOT_AVAILABLE:
-        #     print("Пропуск применения ограничений: sqlglot не установлен.")
-        #     return restricted_sql, restrictions_applied_successfully
-
-        if not user or not report:
-            return sql_query, restrictions_applied_successfully
-
-        if not os.path.exists(self.authority_db_path): # self.authority_db_path теперь путь к CSV
-            return sql_query, restrictions_applied_successfully
-
-        auth_rules = []
-        try:
-            with open(self.authority_db_path, mode='r', encoding='utf-8', newline='') as csvfile:
-                reader = csv.DictReader(csvfile, delimiter=';') # Разделитель ; колонки zuser, zvobj, auth
-                for row in reader:
-                    auth_rules.append(row)
-        except Exception: # Ошибка чтения/парсинга CSV
-            return sql_query, restrictions_applied_successfully
-
-        best_match_auth_condition = None
-        # Уровни специфичности: 2 (точное), 1 (префикс '7'), 0 ('*'), -1 (нет)
-        current_best_specificity_level = -1
-        current_best_prefix_len = -1 # Для сравнения длины zvobj у префиксных правил '7'
-
-        for rule in auth_rules:
-            if rule.get('zuser') == user:
-                rule_zvobj = rule.get('zvobj', '')
-                rule_auth = rule.get('auth', '') # Получаем auth из правила
-
-                if not rule_auth: # Пропускаем правила с пустым auth
-                    continue
-
-                specificity_level = -1
-                prefix_len = 0
-
-                if rule_zvobj == report: # 1. Точное совпадение
-                    specificity_level = 2
-                # 2. Префиксное правило "начинается с 7"
-                elif rule_zvobj and report.startswith(rule_zvobj) and rule_zvobj.startswith('7'):
-                    specificity_level = 1
-                    prefix_len = len(rule_zvobj)
-                elif rule_zvobj == '*': # 3. Общее правило '*'
-                    specificity_level = 0
-                
-                # Обновление лучшего совпадения на основе уровня специфичности и длины префикса
-                if specificity_level > current_best_specificity_level:
-                    current_best_specificity_level = specificity_level
-                    best_match_auth_condition = rule_auth
-                    if specificity_level == 1: # Если это префиксное правило
-                        current_best_prefix_len = prefix_len
-                elif specificity_level == 1 and current_best_specificity_level == 1: # Оба префиксные
-                    if prefix_len > current_best_prefix_len: # Выбираем более длинный (более специфичный) префикс
-                        best_match_auth_condition = rule_auth
-                        current_best_prefix_len = prefix_len
-        
-        auth_to_apply = "1 = 2" # По умолчанию запрет, если подходящих прав не найдено или они некорректны
-        if best_match_auth_condition: # Если найдено правило и его auth не пустое
-            auth_to_apply = best_match_auth_condition
-        
-        # --- Применение ограничения с помощью sqlglot ---
-        try:
-            if ';' in auth_to_apply: # Простая проверка безопасности для строки auth
-                return sql_query, restrictions_applied_successfully 
-
-            try:
-                # Проверка, парсится ли условие auth (диалект можно указать, если известен)
-                parse_one(f"SELECT * FROM dummy WHERE {auth_to_apply}")
-            except (ParseError, Exception): # Если условие auth невалидно
-                auth_to_apply = '1 = 2' # Применяем запрет
-
-            # Парсим основной SQL-запрос (диалект можно указать, если известен, например, read='hana')
-            parsed_sql_obj = parse_one(sql_query) 
-            restriction_obj = condition(auth_to_apply)
-            
-            parsed_sql_obj = parsed_sql_obj.where(restriction_obj) 
-            # Генерируем SQL (диалект можно указать, если известен, например, dialect='hana')
-            restricted_sql = parsed_sql_obj.sql(pretty=True) 
-            restrictions_applied_successfully = True
-
-        except (ParseError, Exception): # Любые ошибки при работе с sqlglot
-            # Ограничения не применены, возвращаем исходный SQL и False
-            pass 
-        
-        return restricted_sql, restrictions_applied_successfully
-
     def _apply_sql_restrictions(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], bool]]:
         """Узел графа для применения ограничений к сгенерированному SQL."""
         print(f"\n--- Узел: apply_sql_restrictions ---")
@@ -455,7 +360,7 @@ class GPTAgent:
         print(f"Применение ограничений для user='{user_id}', report='{report_id}' к SQL:\n{sql_query}")
 
         # Вызываем основную логику
-        restricted_sql, restrictions_applied = self._apply_sql_restrictions_logic(sql_query, user_id, report_id)
+        restricted_sql, restrictions_applied = apply_restrictions(sql_query, user_id)
 
         # Заменяем исходный SQL в списке сообщений на модифицированный
         # или оставляем исходный, если были ошибки
@@ -554,7 +459,7 @@ class GPTAgent:
         # Добавляем узлы
         workflow.add_node("validate_instruction", self.validate_instruction)
         workflow.add_node("generate_sql_query", self.generate_sql_query)
-        workflow.add_node("apply_sql_restrictions", self._apply_sql_restrictions) # <-- Новый узел
+        workflow.add_node("apply_sql_restrictions", self._apply_sql_restrictions)
         workflow.add_node("comment_sql_query", self.comment_sql_query)
 
         # Определяем точку входа
@@ -562,8 +467,8 @@ class GPTAgent:
 
         # Определяем переходы
         workflow.add_edge("validate_instruction", "generate_sql_query")
-        workflow.add_edge("generate_sql_query", "apply_sql_restrictions") # <-- Новый переход
-        workflow.add_edge("apply_sql_restrictions", "comment_sql_query") # <-- Измененный переход
+        workflow.add_edge("generate_sql_query", "apply_sql_restrictions")
+        workflow.add_edge("apply_sql_restrictions", "comment_sql_query")
         workflow.add_edge("comment_sql_query", END)
 
         return workflow
@@ -581,16 +486,7 @@ class GPTAgent:
         print(f"\n===== Диалог для {thread_id} (User: {user_id}, Report: {report_id}) =====")
         print(f"Пользователь: {message}")
 
-        # --- Определение, новый ли это поток (для базовой истории) ---
-        # Упрощаем: Не делаем get_state здесь, полагаемся на invoke для загрузки состояния
-        # Базовую историю добавим, если invoke вернет пустое начальное состояние (или при ошибке)
-        is_new_thread = False # Предполагаем, что поток существует, invoke разберется
-        # Можно добавить проверку существования файла чекпоинта, но это не гарантирует наличие потока
-
         input_messages = []
-        # Базовую историю добавим *только* если invoke не сможет загрузить существующую
-        # (Логика добавления базовой истории перенесена внутрь try-except ниже)
-
         # Добавляем текущее сообщение пользователя
         input_messages.append(HumanMessage(content=message))
 
@@ -654,143 +550,3 @@ class GPTAgent:
     # Добавим деструктор для попытки закрыть соединение при уничтожении объекта
     def __del__(self):
         self.close_connection()
-
-# --- Основной блок выполнения ---
-if __name__ == "__main__":
-
-    # --- Пути к файлам ---
-    # Используем os.path.join для кроссплатформенности
-    DATA_DIR = os.path.join("gpt_db", "data")
-    CONF_DIR = os.path.join(DATA_DIR, "confs")
-    # Определяем путь к папке с историей (если она отдельная)
-    # Если история лежит прямо в DATA_DIR, измените путь
-    DIALOG_CASH_DIR = os.path.join(DATA_DIR, "dialogs_cash")
-
-    CONFIG_FILE = os.path.join(CONF_DIR, "config.yaml")
-    STRUCTURE_FILE = os.path.join(CONF_DIR, 'otgruzki_structure.txt')
-    DIVISIONS_FILE = os.path.join(CONF_DIR, 'divisions.txt')
-    # Убедитесь, что путь к файлу истории правильный
-    BASE_HISTORY_FILE = os.path.join(DIALOG_CASH_DIR, "history_base.json")
-    # BASE_HISTORY_FILE = os.path.join(DATA_DIR, "history_base.json") # Альтернативный путь, если история в data
-    AUTHORITY_DB_FILE = os.path.join(DATA_DIR, 'authority.db') # Путь к вашей существующей БД прав
-    CHECKPOINT_DB_FILE = os.path.join(DATA_DIR, "checkpoints.sqlite")
-
-    # --- Создание директорий, если их нет ---
-    os.makedirs(CONF_DIR, exist_ok=True)
-    # Создаем папку для истории, только если она используется и отличается от DATA_DIR
-    if DIALOG_CASH_DIR != DATA_DIR:
-        os.makedirs(DIALOG_CASH_DIR, exist_ok=True)
-
-    # --- Проверка наличия критически важной БД авторизации ---
-    if not os.path.exists(AUTHORITY_DB_FILE):
-        print(f"!!! КРИТИЧЕСКАЯ ОШИБКА: Файл БД авторизации '{AUTHORITY_DB_FILE}' не найден.")
-        print("Этот файл необходим для работы ограничений доступа.")
-        print("Пожалуйста, создайте и заполните его перед запуском скрипта.")
-        exit(1) # Выход, так как без БД прав тест не имеет смысла
-    else:
-        print(f"БД авторизации найдена: '{AUTHORITY_DB_FILE}'")
-
-    # --- Создание базовых файлов конфигурации/данных (если их нет) ---
-    required_files_content = {
-        CONFIG_FILE: {"GIGACHAT_CREDENTIALS": "YOUR_GIGACHAT_API_KEY_HERE"},
-        STRUCTURE_FILE: "# Описание полей таблицы SAPABAP1.ZZSDM_117_CUS\n# FIELD_NAME (TYPE): Description\nFKDAT (DATE): Дата фактуры\nFKIMG (DECIMAL): Количество фактуры\nNETWR (DECIMAL): Чистая стоимость\nKUNNR (VARCHAR): Номер клиента\nZZDVAN (VARCHAR): Код дивизиона 1\nZCFO1 (VARCHAR): Код ЦФО 1\nZDIV (VARCHAR): Код дивизиона (основной?)\n...", # Добавьте ZCFO1 и ZDIV, если они есть
-        DIVISIONS_FILE: "# Код: Название\n01: Див 1\n02: Урал\n03: Див 3\n04: Див 4\n100: Центр\n...", # Добавьте коды 01, 02, 03, 04 если они используются в правах
-    }
-    for filepath, content in required_files_content.items():
-        if not os.path.exists(filepath):
-            print(f"Предупреждение: Файл '{filepath}' не найден. Создается базовый файл.")
-            try:
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    if isinstance(content, dict): # YAML
-                        yaml.dump(content, f)
-                        if "GIGACHAT_CREDENTIALS" in content:
-                             print(f"!!! ВНИМАНИЕ: Пожалуйста, отредактируйте '{filepath}' и вставьте ваш реальный GIGACHAT_CREDENTIALS.")
-                    elif isinstance(content, str): # TXT
-                        f.write(content)
-            except Exception as e:
-                print(f"Не удалось создать файл '{filepath}': {e}")
-                if "config" in filepath or "structure" in filepath or "divisions" in filepath:
-                    exit(1)
-
-    # --- Создание файла базовой истории (если нет) ---
-    if not os.path.exists(BASE_HISTORY_FILE):
-         print(f"Предупреждение: Файл базовой истории '{BASE_HISTORY_FILE}' не найден. Создается пустой файл.")
-         try:
-             with open(BASE_HISTORY_FILE, 'w', encoding='utf-8') as f:
-                 pass # Создаем пустой файл
-         except Exception as e:
-             print(f"Не удалось создать файл базовой истории '{BASE_HISTORY_FILE}': {e}")
-
-    # --- Основной запуск агента ---
-    agent = None # Инициализируем agent как None
-    try:
-        # Инициализируем агент, передавая пути к файлам
-        agent = GPTAgent(
-            config_file=CONFIG_FILE,
-            structure_file=STRUCTURE_FILE,
-            divisions_file=DIVISIONS_FILE,
-            base_history_file=BASE_HISTORY_FILE,
-            authority_db_path=AUTHORITY_DB_FILE, # Используем существующую БД
-            checkpoint_db=CHECKPOINT_DB_FILE
-        )
-
-        # --- Тестовые запросы для проверки ограничений ---
-        # Формат: (user_id, report_id, query_text)
-        test_queries = [
-            # --- Тесты для user1 ---
-            ("user1", "7.117", "Покажи чистую стоимость и количество фактур за сегодня"),
-            # Ожидаемый фильтр: AND ((ZCFO1 in (...) or (ZDIV = '04')))
-
-            ("user1", "7.117", "Покажи сумму отгрузок для дивизиона 02 за прошлый месяц"),
-            # Ожидаемый фильтр: WHERE ZDIV = '02' AND ... AND ((ZCFO1 in (...) or (ZDIV = '04')))
-
-            ("user1", "7.999", "Покажи количество уникальных клиентов за вчера"),
-             # Ожидаемый фильтр: AND (ZDIV = '03') - правило '7*'
-
-            ("user1", "7.999", "Покажи отгрузки для дивизиона 01 за сегодня"),
-             # Ожидаемый фильтр: WHERE ZDIV = '01' AND ... AND (ZDIV = '03') -> Скорее всего, вернет 0 строк
-
-            ("user1", "other_report", "Назови топ 5 клиентов по сумме NETWR за год"),
-             # Ожидаемый фильтр: AND (ZDIV = '01') - правило '*'
-
-            ("user1", "other_report", "Покажи отгрузки для дивизиона 03 за сегодня"),
-             # Ожидаемый фильтр: WHERE ZDIV = '03' AND ... AND (ZDIV = '01') -> Скорее всего, вернет 0 строк
-
-            # --- Тесты для user2 ---
-            ("user2", "7.117", "Покажи сумму чистой стоимости по дивизионам за прошлую неделю"),
-             # Ожидаемый фильтр: AND (ZDIV = '01') - правило '7*'
-
-            ("user2", "7.117", "Сколько отгрузили в дивизион 02 вчера?"),
-             # Ожидаемый фильтр: WHERE ZDIV = '02' AND ... AND (ZDIV = '01') -> Скорее всего, вернет 0 строк
-
-            ("user2", "other_report", "Покажи количество фактур за сегодня"),
-             # Ожидаемый фильтр: AND (1=2) - нет подходящих правил для user2 и '*'/'other_report'
-
-            # --- Тест для пользователя без прав ---
-            ("user_no_rights", "7.117", "Покажи что-нибудь"),
-             # Ожидаемый фильтр: AND (1=2) - нет правил для этого пользователя
-        ]
-
-        print("\n" + "="*30 + f"\nНачало серии тестовых запросов для проверки ограничений\n" + "="*30)
-
-        for i, (user_id, report_id, query) in enumerate(test_queries):
-            print(f"\n--- Тест {i+1}: User='{user_id}', Report='{report_id}' ---")
-            # Запускаем агент с указанными user_id, report_id и запросом
-            agent.run(user_id=user_id, message=query, report_id=report_id)
-            print("-" * 20)
-
-        print("\n" + "="*30 + f"\nСерия тестовых запросов завершена\n" + "="*30)
-
-
-    except ImportError as e:
-         print(f"\n!!! Ошибка импорта: {e}. Установите недостающие зависимости.")
-    except FileNotFoundError as e:
-         print(f"\n!!! Критическая ошибка: Не найден необходимый файл: {e}")
-    except Exception as e:
-        print(f"\n!!! Критическая ошибка при инициализации или запуске агента: {e}")
-        traceback.print_exc()
-    finally:
-        # Убедимся, что соединение с БД чекпоинтера закрыто
-        if agent:
-            agent.close_connection()
-        print("\nПрограмма завершена.")

@@ -21,7 +21,6 @@ CONFIG_FILE = os.path.join(CONF_DIR, "config.yaml")
 STRUCTURE_FILE = os.path.join(CONF_DIR, 'otgruzki_structure.txt')
 DIVISIONS_FILE = os.path.join(CONF_DIR, 'divisions.txt')
 BASE_HISTORY_FILE = os.path.join(DIALOG_CASH_DIR, "history_base.json")
-AUTHORITY_DB_FILE = os.path.join(DATA_DIR, 'authority.csv')
 CHECKPOINT_DB_FILE = os.path.join(DATA_DIR, "checkpoints.sqlite")
 
 # --- Функция для загрузки и кеширования агента ---
@@ -37,9 +36,6 @@ def load_gpt_agent():
         # Это упрощенная версия, чтобы избежать падения агента при первом запуске
         # В идеале, эти файлы должны быть подготовлены заранее.
         dummy_files = {
-            CONFIG_FILE: {"GIGACHAT_CREDENTIALS": "YOUR_GIGACHAT_API_KEY_HERE"},
-            STRUCTURE_FILE: "FKDAT (DATE): Дата фактуры\nNETWR (DECIMAL): Чистая стоимость",
-            DIVISIONS_FILE: "100: Центр",
             BASE_HISTORY_FILE: "" # Пустой файл истории
         }
         for filepath, content in dummy_files.items():
@@ -53,13 +49,6 @@ def load_gpt_agent():
                     st.error(f"Не удалось создать файл '{filepath}': {e_file}")
                     return None # Не можем продолжить без критических файлов
 
-        if not os.path.exists(AUTHORITY_DB_FILE):
-            st.error(f"КРИТИЧЕСКАЯ ОШИБКА: Файл БД авторизации '{AUTHORITY_DB_FILE}' не найден. Агент не сможет применять ограничения.")
-            # Можно создать пустую БД SQLite, но это не даст функциональности ограничений
-            # Для демонстрации можно продолжить, но агент будет работать некорректно с ограничениями
-            # return None # Раскомментируйте, если хотите остановить приложение при отсутствии БД прав
-
-        # Загрузка .env файла, если он есть
         load_dotenv()
 
         agent = GPTAgent(
@@ -67,7 +56,6 @@ def load_gpt_agent():
             structure_file=STRUCTURE_FILE,
             divisions_file=DIVISIONS_FILE,
             base_history_file=BASE_HISTORY_FILE,
-            authority_db_path=AUTHORITY_DB_FILE,
             checkpoint_db=CHECKPOINT_DB_FILE
         )
         st.success("Агент успешно инициализирован.")

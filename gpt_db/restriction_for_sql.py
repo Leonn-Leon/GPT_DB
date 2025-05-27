@@ -12,13 +12,13 @@ def apply_restrictions(sql_query, user):
 
     cursor.execute('SELECT * FROM ZARM_AUTH_CFO where zuser = ?', (user,))
     rows = cursor.fetchall()
-    connection.close()  
+    connection.close()
     
     #если нет прав добавляем невыполнимый фильтр (строка не найдена). если auth - пустая строка, ограничений нет
     if not rows:
         auth = '1 = 2'
     elif rows[0]['auth'] == '':
-        return parsed.sql(pretty=True, identify=True)
+        return parsed.sql(pretty=True, identify=True), True
     else:
         auth = rows[0]['auth']
 
@@ -26,7 +26,7 @@ def apply_restrictions(sql_query, user):
     parsed_with_restriction = parse_one(sql_query).where(where_condition)
     result_sql = parsed_with_restriction.sql(pretty=True, identify=True)
     
-    return result_sql
+    return result_sql, True
 
 
 if __name__ == "__main__":

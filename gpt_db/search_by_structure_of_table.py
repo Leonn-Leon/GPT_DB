@@ -39,5 +39,5 @@ def search_by_structure_of_table(strings) -> dict[str, list[tuple[str, str, floa
 
 
 if __name__ == "__main__":
-    test_query = ['менеджер за сделку', 'Маржа ССЦ за позицию']
+    test_query = ['на урале']
     print(search_by_structure_of_table(test_query))

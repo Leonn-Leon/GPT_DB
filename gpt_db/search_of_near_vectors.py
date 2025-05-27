@@ -50,5 +50,9 @@ def search_of_near_vectors(strings) -> dict[str, list[tuple[str, float, str, str
 
 
 if __name__ == "__main__":
-    test_query = ['Арматура десятка А400', 'филиал екатеринбург']
+    test_query = ['филиал екатеринбург', 'центральный дивизион']
+    # Замерить время выполнения функции
+    import time
+    start_time = time.time()
+    print("--- %s seconds ---" % (time.time() - start_time))
     print(search_of_near_vectors(test_query))
