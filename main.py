@@ -18,7 +18,7 @@ CONF_DIR = os.path.join(DATA_DIR, "confs")
 DIALOG_CASH_DIR = os.path.join(DATA_DIR, "dialogs_cash") # Убедитесь, что этот путь соответствует вашей структуре
 
 CONFIG_FILE = os.path.join(CONF_DIR, "config.yaml")
-STRUCTURE_FILE = os.path.join(CONF_DIR, 'otgruzki_structure.txt')
+STRUCTURE_FILE = os.path.join(CONF_DIR, 'otgruzki_structure.yaml')
 DIVISIONS_FILE = os.path.join(CONF_DIR, 'divisions.txt')
 BASE_HISTORY_FILE = os.path.join(DIALOG_CASH_DIR, "history_base.json")
 CHECKPOINT_DB_FILE = os.path.join(DATA_DIR, "checkpoints.sqlite")
@@ -111,10 +111,6 @@ if prompt := st.chat_input("Ваш вопрос к БД отгрузок:"):
         # Получаем ответ от агента
         with st.spinner("Агент думает... (проверьте консоль, если ожидается уточнение)"):
             try:
-                # Запускаем агент. `run` возвращает `final_state_values`
-                # final_state_values['messages'] содержит сообщения этого раунда графа
-                # Последнее сообщение - это комментарий.
-                # Предпоследнее (если есть и корректное) - это SQL.
                 response_state = agent.run(user_id=user_id, message=prompt, report_id=report_id)
 
                 generated_sql = None
@@ -147,7 +143,7 @@ if prompt := st.chat_input("Ваш вопрос к БД отгрузок:"):
                     if generated_sql:
                         st.code(generated_sql, language="sql")
                     elif agent_comment and "sql generation skipped" not in agent_comment.lower() and "ошибка" not in agent_comment.lower():
-                        st.info("SQL-запрос не был явно извлечен для отображения, но агент мог его сгенерировать и использовать.")
+                        st.info("SQL-запрос не был явно извлечен для отображения, но агент мог его сгенерировать и использовать"+ f"{agent_comment}")
 
 
             except Exception as e:

@@ -37,7 +37,7 @@ class GPTAgent:
     """
     def __init__(self,
                  config_file: str = "gpt_db/data/confs/config.yaml",
-                 structure_file: str = 'gpt_db/data/confs/otgruzki_structure.txt',
+                 structure_file: str = 'gpt_db/data/confs/otgruzki_structure.yaml',
                  divisions_file: str = 'gpt_db/data/confs/divisions.txt',
                  base_history_file: str = "history_base.json",
                  checkpoint_db: str = "checkpoints.sqlite",
@@ -391,7 +391,7 @@ class GPTAgent:
                 "ошибка при генерации sql" not in content_lower and \
                 "ошибка: не удалось применить ограничения" not in content_lower and \
                 "операция отменена" not in content_lower:
-                 sql_query = last_message.content.strip()
+                sql_query = last_message.content.strip()
              else:
                  print("SQL-запрос не найден или была ошибка/отмена на предыдущем шаге. Комментарий не будет сгенерирован.")
                  # Возвращаем последнее сообщение (ошибку/пропуск/отмену) как финальный ответ
@@ -545,7 +545,7 @@ class GPTAgent:
 
 
         print(f"===== Конец диалога для {thread_id} =====")
-        return final_state_values
+        return final_result_message.content
 
     # Добавим деструктор для попытки закрыть соединение при уничтожении объекта
     def __del__(self):
