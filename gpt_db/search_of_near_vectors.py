@@ -1,9 +1,14 @@
 import sqlite3
 import sqlite_vec
-from sentence_transformers import SentenceTransformer
+#from sentence_transformers import SentenceTransformer, CrossEncoder
 from pathlib import Path
+import fasttext.util
+import fasttext
 
-model = SentenceTransformer('cointegrated/rubert-tiny2')
+fasttext.util.download_model('ru', if_exists='ignore')
+model = fasttext.load_model('cc.ru.300.bin')
+#model = SentenceTransformer('cointegrated/rubert-tiny2')
+#cross_encoder = CrossEncoder('DiTy/cross-encoder-russian-msmarco')
 path_to_db = Path(__file__).parent / 'data' / 'sqlite.db'
 
 def search_of_near_vectors(strings) -> dict[str, list[tuple[str, float, str, str]]]:
@@ -20,12 +25,12 @@ def search_of_near_vectors(strings) -> dict[str, list[tuple[str, float, str, str
     connection.enable_load_extension(False)
 
     names_of_tables_query = connection.execute("select name from sqlite_master where type='table'")
-    names_of_tables = [table[0] for table in names_of_tables_query.fetchall() if table[0] != 'ZARM_AUTH_CFO']
+    names_of_tables = [table[0] for table in names_of_tables_query.fetchall() if table[0] not in ('ZARM_AUTH_CFO', 'data_for_train')]
 
     answer = {}
     for string in strings:
         answer[string] = []
-        embedding = model.encode(string)
+        embedding = model.get_sentence_vector(string)
         for name_of_table in names_of_tables:
             row = connection.execute(
                 f"""
@@ -34,6 +39,7 @@ def search_of_near_vectors(strings) -> dict[str, list[tuple[str, float, str, str
                     TXT,
                     KEY
                 FROM {name_of_table}
+                WHERE TXT != ''
                 ORDER BY DISTANCE
                 LIMIT 1
                 """,
@@ -42,7 +48,6 @@ def search_of_near_vectors(strings) -> dict[str, list[tuple[str, float, str, str
         
             to_answer = (name_of_table,) + row
             answer[string].append(to_answer)
-
         answer[string].sort(key=lambda x: x[1])
 
     connection.close()
@@ -50,9 +55,5 @@ def search_of_near_vectors(strings) -> dict[str, list[tuple[str, float, str, str
 
 
 if __name__ == "__main__":
-    test_query = ['филиал екатеринбург', 'центральный дивизион']
-    # Замерить время выполнения функции
-    import time
-    start_time = time.time()
-    print("--- %s seconds ---" % (time.time() - start_time))
+    test_query = ['Пушко', 'урал', 'фрахт', 'b2b']
     print(search_of_near_vectors(test_query))
