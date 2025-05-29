@@ -125,11 +125,11 @@ if prompt := st.chat_input("Ваш вопрос к БД отгрузок:"):
                         # Ищем SQL: он должен быть предпоследним сообщением AIMessage,
                         # если все прошло успешно до этапа комментирования.
                         if len(graph_messages) > 1 and hasattr(graph_messages[-2], 'content'):
-                            potential_sql = graph_messages[-2].content
+                            potential_sql = graph_messages[-1].content.split("===")[0]
                             # Простая проверка, что это похоже на SQL, а не на сообщение об ошибке/пропуске
                             # или инструкцию "ok" от валидатора
-                            sql_keywords = ["SELECT ", "WITH ", "select ", "with "] # Case-sensitive from GigaChat
-                            if any(keyword in potential_sql for keyword in sql_keywords) and \
+                            sql_keywords = ["select", "from"] # Case-sensitive from GigaChat
+                            if any(keyword in potential_sql.lower() for keyword in sql_keywords) and \
                                 "sql generation skipped" not in potential_sql.lower() and \
                                 "ошибка при генерации sql" not in potential_sql.lower() and \
                                 not potential_sql.lower().startswith("ok\n"):
@@ -143,7 +143,7 @@ if prompt := st.chat_input("Ваш вопрос к БД отгрузок:"):
                     if generated_sql:
                         st.code(generated_sql, language="sql")
                     elif agent_comment and "sql generation skipped" not in agent_comment.lower() and "ошибка" not in agent_comment.lower():
-                        st.info("SQL-запрос не был явно извлечен для отображения, но агент мог его сгенерировать и использовать"+ f"{agent_comment}")
+                        st.info("SQL-запрос не был явно извлечен для отображения, но агент мог его сгенерировать и использовать"+ f"{generated_sql}")
 
 
             except Exception as e:

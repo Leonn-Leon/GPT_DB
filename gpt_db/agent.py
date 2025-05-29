@@ -543,9 +543,8 @@ class GPTAgent:
             if not error_in_state:
                 print(f"Агент: [Нет ответа или произошла ошибка выполнения графа]")
 
-
         print(f"===== Конец диалога для {thread_id} =====")
-        return final_result_message.content
+        return final_state_values
 
     # Добавим деструктор для попытки закрыть соединение при уничтожении объекта
     def __del__(self):
