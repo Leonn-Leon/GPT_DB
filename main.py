@@ -3,15 +3,7 @@ import os
 import yaml # Используется в GPTAgent, нужен для инициализации путей
 from dotenv import load_dotenv # Используется в GPTAgent
 
-# Импортируем ваш класс GPTAgent
-# Предполагается, что ваш скрипт сохранен как my_agent_module.py
-# в той же директории, что и этот streamlit_app.py
 from gpt_db.agent import GPTAgent 
-
-# --- Конфигурация путей (скопировано из вашего __main__ блока) ---
-# Это нужно, чтобы агент мог найти свои файлы конфигурации.
-# Убедитесь, что эти пути корректны относительно места запуска Streamlit.
-# Обычно Streamlit запускается из корня проекта.
 
 DATA_DIR = os.path.join("gpt_db", "data")
 CONF_DIR = os.path.join(DATA_DIR, "confs")
@@ -69,12 +61,6 @@ def load_gpt_agent():
 # --- Основной интерфейс Streamlit ---
 st.title("Чат с SQL-Агентом")
 
-st.info(
-    "**Важно:** Если агент запрашивает уточнения, вам нужно будет ввести их "
-    "**в консоли (терминале), где запущен Streamlit**, а не в этом веб-интерфейсе. "
-    "После ввода в консоли, агент продолжит работу, и результат отобразится здесь."
-)
-
 agent = load_gpt_agent()
 
 # --- Боковая панель для ввода ID пользователя и отчета ---
@@ -109,42 +95,24 @@ if prompt := st.chat_input("Ваш вопрос к БД отгрузок:"):
             st.markdown(prompt)
 
         # Получаем ответ от агента
-        with st.spinner("Агент думает... (проверьте консоль, если ожидается уточнение)"):
+        with st.spinner("Агент думает..."):
             try:
                 response_state = agent.run(user_id=user_id, message=prompt, report_id=report_id)
+                last = response_state["messages"][-1] if response_state and response_state.get("messages") else None
 
-                generated_sql = None
-                agent_comment = "Не удалось получить комментарий от агента."
-
-                if response_state and response_state.get('messages'):
-                    graph_messages = response_state['messages']
-                    if graph_messages:
-                        # Последнее сообщение - это комментарий или сообщение об ошибке
-                        agent_comment = graph_messages[-1].content.split("===")[1]
-
-                        # Ищем SQL: он должен быть предпоследним сообщением AIMessage,
-                        # если все прошло успешно до этапа комментирования.
-                        if len(graph_messages) > 1 and hasattr(graph_messages[-2], 'content'):
-                            potential_sql = graph_messages[-1].content.split("===")[0]
-                            # Простая проверка, что это похоже на SQL, а не на сообщение об ошибке/пропуске
-                            # или инструкцию "ok" от валидатора
-                            sql_keywords = ["select", "from"] # Case-sensitive from GigaChat
-                            if any(keyword in potential_sql.lower() for keyword in sql_keywords) and \
-                                "sql generation skipped" not in potential_sql.lower() and \
-                                "ошибка при генерации sql" not in potential_sql.lower() and \
-                                not potential_sql.lower().startswith("ok\n"):
-                                generated_sql = potential_sql
-
-                # Добавляем ответ агента в историю и отображаем
-                assistant_message = {"role": "assistant", "content": agent_comment, "sql": generated_sql}
-                st.session_state.messages.append(assistant_message)
-                with st.chat_message("assistant"):
-                    st.markdown(agent_comment)
-                    if generated_sql:
-                        st.code(generated_sql, language="sql")
-                    elif agent_comment and "sql generation skipped" not in agent_comment.lower() and "ошибка" not in agent_comment.lower():
-                        st.info("SQL-запрос не был явно извлечен для отображения, но агент мог его сгенерировать и использовать"+ f"{generated_sql}")
-
+                if last:
+                    with st.chat_message("assistant"):
+                        if "select" in last.content.lower() and "from" in last.content.lower():
+                            sql_content = last.content.split("===")[0]
+                            comment_content = last.content.split("===")[1]
+                            st.code(sql_content, language="sql")
+                            st.markdown(comment_content.strip())
+                            assistant_message = {"role": "assistant", "content": comment_content, "sql": sql_content}
+                            st.session_state.messages.append(assistant_message)
+                        else:
+                            st.markdown(last.content.strip())
+                            assistant_message = {"role": "assistant", "content": last.content.strip(), "sql": None}
+                            st.session_state.messages.append(assistant_message)
 
             except Exception as e:
                 st.error(f"Ошибка при вызове агента: {e}")
@@ -156,7 +124,6 @@ if prompt := st.chat_input("Ваш вопрос к БД отгрузок:"):
                 with st.chat_message("assistant"):
                     st.markdown(error_message_for_chat)
 
-# --- Кнопка для очистки истории чата и кеша агента ---
 if st.sidebar.button("Очистить чат и перезагрузить агента"):
     st.session_state.messages = []
     st.cache_resource.clear() # Очищаем кеш, чтобы агент перезагрузился

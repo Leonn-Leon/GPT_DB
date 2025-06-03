@@ -27,6 +27,8 @@ class MessagesState(TypedDict):
     user_id: Optional[str]
     report_id: Optional[str]
     restrictions_applied: bool
+    needs_clarification: bool
+
 
 
 class GPTAgent:
@@ -187,90 +189,39 @@ class GPTAgent:
         except Exception as e: print(f"Неожиданная ошибка при загрузке базовой истории '{self.base_history_file}': {e}")
         return messages
 
+    def validate_instruction(self, state: MessagesState) -> MessagesState:
+        current_messages = state["messages"]
+        last_user_msg = current_messages[-1] if current_messages else None
 
-    def validate_instruction(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], str, None]]:
-        current_messages = state['messages']
-        # Инициализируем final_instruction как None в начале
-        output_state = {"messages": [], "final_instruction": None}
+        # На старте всегда должно быть сообщение пользователя
+        if not isinstance(last_user_msg, HumanMessage):
+            return {"messages": current_messages,
+                    "final_instruction": None,
+                    "needs_clarification": False}
 
-        # Если последнее сообщение не HumanMessage, что-то пошло не так (или это начало)
-        if not current_messages or not isinstance(current_messages[-1], HumanMessage):
-             print("Предупреждение: validate_instruction вызван без начального сообщения пользователя.")
-             # Можно вернуть текущие сообщения или специальное сообщение об ошибке
-             output_state["messages"] = current_messages
-             return output_state # Возвращаем как есть
+        sys_prompt = (self.config["validate_instruction"]
+                    .replace("<otgruzki_structure>", self.db_schema)
+                    .replace("<divisions>",         self.divisions)
+                    .replace("<today_date>",        datetime.date.today().strftime("%Y%m%d")))
 
-        last_user_message = current_messages[-1].content.strip()
+        convo = [SystemMessage(content=sys_prompt)] + current_messages
+        result = self.llm.invoke(convo).content.strip()
 
-        print(f"\n--- Узел: validate_instruction ---")
-        print(f"Получено сообщение: {last_user_message}")
+        # ▸ Если всё ок — сохраняем инструкцию и идём дальше
+        if result.lower().startswith("ok"):
+            final_instruction = result.split("\n", 1)[1].strip() if "\n" in result else ""
+            return {
+                "messages": [AIMessage(content=result)],
+                "final_instruction": final_instruction,
+                "needs_clarification": False
+            }
 
-        sys_msg_content = self.config["validate_instruction"]
-        sys_msg_content = sys_msg_content.replace("<otgruzki_structure>", self.db_schema)\
-                                .replace("<divisions>", self.divisions)\
-                                .replace("<today_date>", datetime.date.today().strftime('%Y%m%d'))
-
-        # Используем только текущую историю для LLM в этом узле
-        conversation_for_llm = [SystemMessage(content=sys_msg_content)] + current_messages
-
-        # !!! ИНТЕРАКТИВНЫЙ ЦИКЛ !!!
-        while True:
-            print("\nВызов LLM для валидации...")
-            try:
-                response = self.llm.invoke(conversation_for_llm)
-                result_text = response.content.strip()
-                print(f"Ответ LLM (валидация): {result_text}")
-            except Exception as e:
-                print(f"Ошибка при вызове LLM в validate_instruction: {e}")
-                output_state["messages"] = [AIMessage(content=f"Произошла ошибка при обращении к языковой модели: {e}")]
-                return output_state # Возвращаем ошибку
-
-            lower_text = result_text.lower()
-            if lower_text.startswith("ok"):
-                parts = result_text.split('\n', 1)
-                final_instruction = parts[1].strip() if len(parts) > 1 else "Инструкция не извлечена после 'ok'"
-                print(f"✅ Инструкция принята: {final_instruction}")
-                # Возвращаем сообщение "ok..." и сохраняем инструкцию в state
-                output_state["messages"] = [AIMessage(content=result_text)]
-                output_state["final_instruction"] = final_instruction
-                return output_state
-            else:
-                # Модель просит уточнений
-                print(f"⚠️ Уточнение от модели: {result_text}")
-                try:
-                    ai_question_message = AIMessage(content=result_text)
-                    # Добавляем вопрос в локальную историю для следующей итерации
-                    conversation_for_llm.append(ai_question_message)
-
-                    # !!! БЛОКИРУЮЩИЙ ВВОД !!!
-                    clarification = input(f"🔄 [{datetime.datetime.now().strftime('%H:%M:%S')}] Введите уточнение (или 'stop' для выхода):\n{result_text}\n> ")
-                    clarification = clarification.strip()
-
-                    user_clarification_message = HumanMessage(content=clarification)
-
-                    if clarification.lower() == 'stop' or not clarification:
-                        print("Прервано пользователем.")
-                        # Возвращаем сообщения диалога отмены
-                        output_state["messages"] = [ai_question_message, user_clarification_message, AIMessage(content="Операция отменена пользователем.")]
-                        output_state["final_instruction"] = None # Сбрасываем инструкцию
-                        return output_state
-
-                    # Добавляем ответ пользователя в локальную историю для следующей итерации
-                    conversation_for_llm.append(user_clarification_message)
-                    # ВАЖНО: Эти сообщения (ai_question, user_clarification) не добавляются
-                    # в глобальное состояние state['messages'] до завершения цикла (ok/stop).
-                    # Они будут потеряны в чекпоинте, если процесс прервется здесь.
-
-                except EOFError:
-                     print("Ошибка ввода (EOF), прерывание.")
-                     output_state["messages"] = [AIMessage(content="Произошла ошибка ввода, операция прервана.")]
-                     output_state["final_instruction"] = None
-                     return output_state
-                except Exception as e:
-                     print(f"Неожиданная ошибка ввода: {e}")
-                     output_state["messages"] = [AIMessage(content=f"Произошла ошибка обработки ввода: {e}")]
-                     output_state["final_instruction"] = None
-                     return output_state
+        # ▸ Иначе LLM просит уточнение
+        return {
+            "messages": [AIMessage(content=result)],  # вопрос моделью
+            "final_instruction": None,
+            "needs_clarification": True
+        }
 
     def generate_sql_query(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], str, None]]:
         print(f"\n--- Узел: generate_sql_query ---")
@@ -453,25 +404,32 @@ class GPTAgent:
 
     # --- Сборка графа ---
     def _build_graph(self) -> StateGraph:
-        """Собирает граф LangGraph с узлом ограничений."""
         workflow = StateGraph(MessagesState)
 
-        # Добавляем узлы
-        workflow.add_node("validate_instruction", self.validate_instruction)
-        workflow.add_node("generate_sql_query", self.generate_sql_query)
+        workflow.add_node("validate_instruction",   self.validate_instruction)
+        workflow.add_node("generate_sql_query",     self.generate_sql_query)
         workflow.add_node("apply_sql_restrictions", self._apply_sql_restrictions)
-        workflow.add_node("comment_sql_query", self.comment_sql_query)
+        workflow.add_node("comment_sql_query",      self.comment_sql_query)
 
-        # Определяем точку входа
         workflow.set_entry_point("validate_instruction")
 
-        # Определяем переходы
-        workflow.add_edge("validate_instruction", "generate_sql_query")
-        workflow.add_edge("generate_sql_query", "apply_sql_restrictions")
-        workflow.add_edge("apply_sql_restrictions", "comment_sql_query")
-        workflow.add_edge("comment_sql_query", END)
+        def route_after_validation(state: MessagesState):
+            return "clarify" if state.get("needs_clarification") else "proceed"
 
+        workflow.add_conditional_edges(
+            "validate_instruction",
+            route_after_validation,
+            {
+                "clarify": END,
+                "proceed": "generate_sql_query"
+            }
+        )
+
+        workflow.add_edge("generate_sql_query",     "apply_sql_restrictions")
+        workflow.add_edge("apply_sql_restrictions", "comment_sql_query")
+        workflow.add_edge("comment_sql_query",      END)
         return workflow
+
 
     # --- Функция для запуска диалога ---
     def run(self, user_id: str, message: str, report_id: Optional[str] = "default_report") -> Optional[Dict]:

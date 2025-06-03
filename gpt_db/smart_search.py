@@ -92,9 +92,3 @@ if __name__ == "__main__":
     start_time = time.time()
     print(ss.search_of_near_vectors(test_query))
     print("--- %s seconds ---" % (time.time() - start_time))
-    ####################
-    
-    # test_query = ['менеджер', 'маржа', "время/дата", 'клиент']
-    # start_time = time.time()
-    # print(ss.search_by_structure_of_table(test_query))
-    # print("--- %s seconds ---" % (time.time() - start_time))
