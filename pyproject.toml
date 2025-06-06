@@ -23,7 +23,8 @@ dependencies = [
     "sqlite-vec (>=0.1.6,<0.2.0)",
     "pyyaml (>=6.0.2,<7.0.0)",
     "scipy (>=1.15.3,<2.0.0)",
-    "fasttext-wheel (>=0.9.2,<0.10.0)"
+    "fasttext-wheel (>=0.9.2,<0.10.0)",
+    "langchain-openai (>=0.3.19,<0.4.0)"
 ]
 
 

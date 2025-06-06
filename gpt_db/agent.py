@@ -14,12 +14,16 @@ from langgraph.graph.message import add_messages
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, BaseMessage
 from langchain_gigachat.chat_models import GigaChat
+from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
 from sqlglot import parse_one, condition
 from sqlglot.errors import ParseError
 
 from gpt_db.restriction_for_sql import apply_restrictions
+from gpt_db.search_of_near_vectors import search_of_near_vectors
+from gpt_db.config import gpt_url
+
 # --- Определение состояния графа ---
 class MessagesState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -28,7 +32,7 @@ class MessagesState(TypedDict):
     report_id: Optional[str]
     restrictions_applied: bool
     needs_clarification: bool
-
+    filters: dict
 
 
 class GPTAgent:
@@ -43,7 +47,7 @@ class GPTAgent:
                  divisions_file: str = 'gpt_db/data/confs/divisions.txt',
                  base_history_file: str = "history_base.json",
                  checkpoint_db: str = "checkpoints.sqlite",
-                 llm_model: str = "GigaChat-2-Max",
+                 llm_model: str = "deepseek-chat-v3-0324",
                  llm_temperature: float = 0.01,
                  llm_timeout: int = 600):
         
@@ -63,7 +67,7 @@ class GPTAgent:
 
         # --- Загрузка конфигурации и данных ---
         self.db_schema, self.divisions = self._load_config_and_data()
-        self.GIGACHAT_CREDENTIALS = os.getenv("GIGACHAT_CREDENTIALS")
+        self.API_KEY = os.getenv("API_KEY")
 
         # --- Инициализация LLM ---
         self.llm = self._initialize_llm()
@@ -146,20 +150,20 @@ class GPTAgent:
         return db_schema, divisions_data
 
 
-    def _initialize_llm(self) -> GigaChat:
+    def _initialize_llm(self) -> ChatOpenAI:
         try:
-            llm = GigaChat(
-                credentials=self.GIGACHAT_CREDENTIALS,
+            llm = ChatOpenAI(
+                api_key=self.API_KEY,
                 model=self.llm_model,
-                verify_ssl_certs=False,
                 temperature=self.llm_temperature,
-                timeout=self.llm_timeout
+                timeout=self.llm_timeout,
+                base_url=gpt_url
             )
-            print(f"GigaChat LLM ({self.llm_model}) инициализирован успешно.")
+            print(f"deepseek LLM ({self.llm_model}) инициализирован успешно.")
             return llm
         except Exception as e:
             print(f"Ошибка при инициализации GigaChat: {e}")
-            print("Убедитесь, что GIGACHAT_CREDENTIALS верны и модель доступна.")
+            print("Убедитесь, что API_KEY верны и модель доступна.")
             raise
 
     def _load_base_history(self) -> list[BaseMessage]:
@@ -222,10 +226,28 @@ class GPTAgent:
             "final_instruction": None,
             "needs_clarification": True
         }
+    
+    def get_keys(self, state: MessagesState):
+        sys_prompt = (self.config["filters_search"])
+
+        validated_instruction = state.get('final_instruction')
+        validated_instruction_human = HumanMessage(validated_instruction)
+
+        filters = self.llm.invoke([sys_prompt, validated_instruction_human]).content
+        if filters:
+            filters_and_keys = search_of_near_vectors(filters.split(','))
+            message = AIMessage(f'Найдены ключи для фильтров: {filters_and_keys}')
+        else:
+            filters_and_keys = {}
+            message = AIMessage('Фильтры не найдены')
+
+        print(message.content)
+        return {"messages": [message], "filters": filters_and_keys}
 
     def generate_sql_query(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], str, None]]:
         print(f"\n--- Узел: generate_sql_query ---")
         validated_instruction = state.get('final_instruction')
+        filters = state.get('filters')
         # Инициализируем флаг ограничений как False
         output_state = {"messages": [], "restrictions_applied": False}
 
@@ -238,14 +260,9 @@ class GPTAgent:
 
         sys_msg_content = self.config["generate_sql_query"]
 
-        sys_msg_content = sys_msg_content.replace("<otgruzki_structure>", self.db_schema)\
-                                .replace("<divisions>", self.divisions)\
-                                .replace("<today_date>", datetime.date.today().strftime('%Y%m%d'))
+        sys_msg_content = sys_msg_content.replace("<otgruzki_structure>", self.db_schema)
 
-        conversation = [
-            SystemMessage(content=sys_msg_content),
-            HumanMessage(content=f"Инструкция пользователя: {validated_instruction}")
-        ]
+        conversation = [SystemMessage(sys_msg_content), HumanMessage(f"Описание запроса: {validated_instruction}\nФильтры: {filters}")]
 
         print("Вызов LLM для генерации SQL...")
         try:
@@ -410,6 +427,7 @@ class GPTAgent:
         workflow.add_node("generate_sql_query",     self.generate_sql_query)
         workflow.add_node("apply_sql_restrictions", self._apply_sql_restrictions)
         workflow.add_node("comment_sql_query",      self.comment_sql_query)
+        workflow.add_node("get_keys",               self.get_keys)
 
         workflow.set_entry_point("validate_instruction")
 
@@ -421,10 +439,11 @@ class GPTAgent:
             route_after_validation,
             {
                 "clarify": END,
-                "proceed": "generate_sql_query"
+                "proceed": "get_keys"
             }
         )
 
+        workflow.add_edge("get_keys",     "generate_sql_query")
         workflow.add_edge("generate_sql_query",     "apply_sql_restrictions")
         workflow.add_edge("apply_sql_restrictions", "comment_sql_query")
         workflow.add_edge("comment_sql_query",      END)

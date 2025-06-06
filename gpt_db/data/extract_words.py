@@ -4,15 +4,16 @@ from typing import List, Optional
 from langchain_gigachat.chat_models import GigaChat
 from langchain_core.messages import SystemMessage, HumanMessage
 from dotenv import load_dotenv
-
+from langchain_openai import ChatOpenAI
+from gpt_db.config import gpt_url
 
 class KeywordExtractor:
-    DEFAULT_LLM_MODEL = "GigaChat-2-Max" 
+    DEFAULT_LLM_MODEL = "deepseek-chat-v3-0324" 
     DEFAULT_LLM_TEMPERATURE = 0.1
     DEFAULT_LLM_TIMEOUT = 60
 
     def __init__(self,
-                 gigachat_credentials: Optional[str] = None,
+                 api_key: Optional[str] = None,
                  llm_model: Optional[str] = None,
                  llm_temperature: Optional[float] = None,
                  llm_timeout: Optional[int] = None):
@@ -20,19 +21,19 @@ class KeywordExtractor:
         Инициализирует извлекатель ключевых слов.
 
         Args:
-            gigachat_credentials (Optional[str]): Учетные данные для GigaChat.
-                                                 Если None, пытается загрузить из переменной окружения GIGACHAT_CREDENTIALS.
+            api_key (Optional[str]): Учетные данные для GigaChat.
+                                                 Если None, пытается загрузить из переменной окружения API_KEY.
             llm_model (Optional[str]): Модель GigaChat для использования.
             llm_temperature (Optional[float]): Температура для генерации LLM.
             llm_timeout (Optional[int]): Таймаут для запросов к LLM.
         """
         load_dotenv()
-        if gigachat_credentials is None:
-            self.GIGACHAT_CREDENTIALS = os.getenv("GIGACHAT_CREDENTIALS")
-            if not self.GIGACHAT_CREDENTIALS:
-                print("Предупреждение: GIGACHAT_CREDENTIALS не установлены в переменных окружения и не переданы в конструктор.")
+        if api_key is None:
+            self.API_KEY = os.getenv("API_KEY")
+            if not self.API_KEY:
+                print("Предупреждение: API_KEY не установлены в переменных окружения и не переданы в конструктор.")
         else:
-            self.GIGACHAT_CREDENTIALS = gigachat_credentials
+            self.API_KEY = api_key
 
         self.llm_model = llm_model or self.DEFAULT_LLM_MODEL
         self.llm_temperature = llm_temperature if llm_temperature is not None else self.DEFAULT_LLM_TEMPERATURE
@@ -43,18 +44,18 @@ class KeywordExtractor:
     def _initialize_llm(self) -> GigaChat:
         """Инициализирует LLM модель GigaChat."""
         try:
-            llm = GigaChat(
-                credentials=self.GIGACHAT_CREDENTIALS,
+            llm = ChatOpenAI(
+                api_key=self.API_KEY,
                 model=self.llm_model,
-                verify_ssl_certs=False, # Оставил False, как в вашем примере
                 temperature=self.llm_temperature,
                 timeout=self.llm_timeout,
+                base_url=gpt_url
             )
             print(f"GigaChat LLM ({self.llm_model}) инициализирован успешно.")
             return llm
         except Exception as e:
             print(f"Ошибка при инициализации GigaChat: {e}")
-            print("Убедитесь, что GIGACHAT_CREDENTIALS верны, модель доступна и указан правильный scope.")
+            print("Убедитесь, что API_KEY верны, модель доступна и указан правильный scope.")
             raise
 
     def extract_keywords(self, user_query: str) -> List[str]:
