@@ -1,4 +1,4 @@
-    - description: "Номер фактуры, отгрузка."
+    - description: "Номер фактуры, это тоже самое что отгрузка."
       technical_name: "VBRK_VBELN"
       key: true
       type: "характеристика"

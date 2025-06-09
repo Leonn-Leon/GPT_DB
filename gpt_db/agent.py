@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from sqlglot import parse_one, condition
 from sqlglot.errors import ParseError
 
+# Импортируем функции напрямую
 from gpt_db.restriction_for_sql import apply_restrictions
 from gpt_db.search_of_near_vectors import search_of_near_vectors
 from gpt_db.config import gpt_url
@@ -30,7 +31,7 @@ class MessagesState(TypedDict):
     final_instruction: Optional[str]
     user_id: Optional[str]
     report_id: Optional[str]
-    restrictions_applied: bool
+    restrictions_applied: bool # Флаг, который теперь устанавливается в узле генерации
     needs_clarification: bool
     filters: dict
 
@@ -45,7 +46,6 @@ class GPTAgent:
                  config_file: str = "gpt_db/data/confs/config.yaml",
                  structure_file: str = 'gpt_db/data/confs/otgruzki_structure.yaml',
                  divisions_file: str = 'gpt_db/data/confs/divisions.txt',
-                 base_history_file: str = "history_base.json",
                  checkpoint_db: str = "checkpoints.sqlite",
                  llm_model: str = "deepseek-chat-v3-0324",
                  llm_temperature: float = 0.01,
@@ -57,64 +57,44 @@ class GPTAgent:
         self.config_file = config_file
         self.structure_file = structure_file
         self.divisions_file = divisions_file
-        self.base_history_file = base_history_file
         self.checkpoint_db = checkpoint_db
         self.llm_model = llm_model
         self.llm_temperature = llm_temperature
         self.llm_timeout = llm_timeout
-        self.memory = None # Инициализируем чекпоинтер как None
-        self._sqlite_conn = None # Для хранения соединения с БД чекпоинтов
+        self.memory = None
+        self._sqlite_conn = None
 
         # --- Загрузка конфигурации и данных ---
         self.db_schema, self.divisions = self._load_config_and_data()
-        self.API_KEY = os.getenv("API_KEY")
 
         # --- Инициализация LLM ---
         self.llm = self._initialize_llm()
 
-        # --- Загрузка базовой истории ---
-        print(f"Загрузка базовой истории из {self.base_history_file}...")
-        self.base_history_messages = self._load_base_history()
-        print(f"Загружено {len(self.base_history_messages)} сообщений базовой истории.")
-
         # --- Настройка чекпоинтера (ЯВНАЯ ИНИЦИАЛИЗАЦИЯ) ---
         try:
-            # 1. Создаем соединение SQLite явно
-            # Возвращаем check_same_thread=False, т.к. langgraph может использовать потоки
             self._sqlite_conn = sqlite3.connect(self.checkpoint_db, check_same_thread=False)
             print(f"SQLite соединение к '{self.checkpoint_db}' создано (check_same_thread=False).")
-
-            # 2. Передаем объект соединения в конструктор SqliteSaver
             self.memory = SqliteSaver(conn=self._sqlite_conn)
             print(f"Чекпоинтер SqliteSaver инициализирован с явным соединением.")
-
-            # Проверка типа для уверенности
             if not isinstance(self.memory, SqliteSaver):
                  raise TypeError(f"Ошибка: Инициализация вернула {type(self.memory)}, ожидался SqliteSaver.")
             print(f"Тип self.memory: {type(self.memory)}")
-
-        except TypeError as te:
-             print(f"Ошибка типа при инициализации SqliteSaver: {te}")
-             self.close_connection() # Закрываем соединение при ошибке
-             raise
         except Exception as e:
             print(f"Ошибка при инициализации SqliteSaver для '{self.checkpoint_db}': {e}")
-            self.close_connection() # Закрываем соединение при ошибке
+            self.close_connection()
             raise
 
         # --- Сборка и компиляция графа ---
         try:
             self.graph = self._build_graph()
-            # Передаем созданный self.memory в compile
             self.compiled_agent = self.graph.compile(checkpointer=self.memory)
             print("Граф успешно скомпилирован.")
         except Exception as e:
              print(f"Ошибка при компиляции графа: {e}")
-             self.close_connection() # Закрываем соединение при ошибке
+             self.close_connection()
              raise
 
     def close_connection(self):
-        """Закрывает соединение с БД чекпоинтера, если оно было открыто."""
         if self._sqlite_conn:
             try:
                 print(f"Закрытие соединения с БД чекпоинтера '{self.checkpoint_db}'...")
@@ -125,310 +105,236 @@ class GPTAgent:
                 print(f"Ошибка при закрытии соединения с БД чекпоинтера: {e}")
 
     # --- Методы загрузки и инициализации (без изменений) ---
-    def _load_config_and_data(self) -> tuple[str, str, str]:
+    def _load_config_and_data(self) -> tuple[str, str]:
         try:
             with open(self.config_file, "r", encoding="utf-8") as f:
                 self.config = yaml.safe_load(f)
         except Exception as e:
             print(f"Ошибка при чтении файла конфигурации '{self.config_file}': {e}")
             raise
-
         try:
             with open(self.structure_file, 'r', encoding='utf-8') as file:
                 db_schema = file.read().strip()
         except Exception as e:
             print(f"Ошибка при чтении файла схемы '{self.structure_file}': {e}")
             raise
-
         try:
             with open(self.divisions_file, 'r', encoding='utf-8') as file:
                 divisions_data = file.read().strip()
         except Exception as e:
             print(f"Ошибка при чтении файла дивизионов '{self.divisions_file}': {e}")
             raise
-
         return db_schema, divisions_data
-
 
     def _initialize_llm(self) -> ChatOpenAI:
         try:
             llm = ChatOpenAI(
-                api_key=self.API_KEY,
                 model=self.llm_model,
-                temperature=self.llm_temperature,
-                timeout=self.llm_timeout,
+                temperature=self.llm_temperature, timeout=self.llm_timeout,
                 base_url=gpt_url
             )
             print(f"deepseek LLM ({self.llm_model}) инициализирован успешно.")
             return llm
         except Exception as e:
-            print(f"Ошибка при инициализации GigaChat: {e}")
-            print("Убедитесь, что API_KEY верны и модель доступна.")
+            print(f"Ошибка при инициализации LLM: {e}")
             raise
-
-    def _load_base_history(self) -> list[BaseMessage]:
-        messages = []
-        if not os.path.exists(self.base_history_file):
-            print(f"Предупреждение: Файл базовой истории '{self.base_history_file}' не найден. Будет создан пустой.")
-            try:
-                with open(self.base_history_file, 'w', encoding='utf-8') as f: pass
-            except Exception as e:
-                 print(f"Не удалось создать файл базовой истории '{self.base_history_file}': {e}")
-            return messages
-        try:
-            with open(self.base_history_file, 'r', encoding='utf-8') as f:
-                for i, line in enumerate(f):
-                    line = line.strip()
-                    if not line: continue
-                    try:
-                        record = json.loads(line)
-                        msg_type = record.get("type")
-                        content = record.get("content", "")
-                        if msg_type in ["human_answer", "human"]: messages.append(HumanMessage(content=content))
-                        elif msg_type in ["agent_answer", "ai"]: messages.append(AIMessage(content=content))
-                        elif msg_type == "system": messages.append(SystemMessage(content=content))
-                        else: print(f"Предупреждение: Неизвестный тип сообщения '{msg_type}' в строке {i+1} файла '{self.base_history_file}'.")
-                    except json.JSONDecodeError as e: print(f"Ошибка декодирования JSON в строке {i+1} файла '{self.base_history_file}': {e}")
-                    except Exception as e: print(f"Ошибка обработки строки {i+1} файла '{self.base_history_file}': {e}")
-        except Exception as e: print(f"Неожиданная ошибка при загрузке базовой истории '{self.base_history_file}': {e}")
-        return messages
-
+    
     def validate_instruction(self, state: MessagesState) -> MessagesState:
+        """
+        ИЗМЕНЕНИЕ: Узел валидации теперь работает по новым, строгим правилам.
+        Проверяет только наличие полей для SELECT, игнорирует WHERE.
+        Возвращает ответ в формате "OK: <инструкция>".
+        """
+        print("\n--- Узел: validate_instruction (строгая версия) ---")
         current_messages = state["messages"]
-        last_user_msg = current_messages[-1] if current_messages else None
+        user_messages = [msg for msg in current_messages if isinstance(msg, HumanMessage)]
+        if not user_messages:
+            return {"messages": [AIMessage(content="Ошибка: не найдено сообщение пользователя.")], "needs_clarification": True}
 
-        # На старте всегда должно быть сообщение пользователя
-        if not isinstance(last_user_msg, HumanMessage):
-            return {"messages": current_messages,
-                    "final_instruction": None,
-                    "needs_clarification": False}
+        # Используем новый, строгий промпт
+        sys_prompt = self.config["validate_instruction"].replace("<otgruzki_structure>", self.db_schema)
 
-        sys_prompt = (self.config["validate_instruction"]
-                    .replace("<otgruzki_structure>", self.db_schema)
-                    .replace("<divisions>",         self.divisions)
-                    .replace("<today_date>",        datetime.date.today().strftime("%Y%m%d")))
-
-        convo = [SystemMessage(content=sys_prompt)] + current_messages
+        convo = [SystemMessage(content=sys_prompt)] + user_messages 
         result = self.llm.invoke(convo).content.strip()
 
-        # ▸ Если всё ок — сохраняем инструкцию и идём дальше
-        if result.lower().startswith("ok"):
-            final_instruction = result.split("\n", 1)[1].strip() if "\n" in result else ""
+        # ИЗМЕНЕНИЕ: Парсим новый формат ответа "OK: ..."
+        if result.startswith("OK:"):
+            final_instruction = result.removeprefix("OK:").strip()
+            print(f"Инструкция валидна: '{final_instruction}'")
             return {
-                "messages": [AIMessage(content=result)],
+                # Сохраняем в историю только сообщение о том, что валидация пройдена
+                "messages": [AIMessage(content=f"Валидация пройдена. Инструкция: {final_instruction}")],
                 "final_instruction": final_instruction,
                 "needs_clarification": False
             }
-
-        # ▸ Иначе LLM просит уточнение
-        return {
-            "messages": [AIMessage(content=result)],  # вопрос моделью
-            "final_instruction": None,
-            "needs_clarification": True
-        }
+        else:
+            print(f"Инструкция требует уточнений: {result}")
+            # Возвращаем уточняющий вопрос от модели
+            return {
+                "messages": [AIMessage(content=result)],
+                "final_instruction": None,
+                "needs_clarification": True
+            }
     
     def get_keys(self, state: MessagesState):
-        sys_prompt = (self.config["filters_search"])
-
+        """
+        ИЗМЕНЕНИЕ: Этот узел теперь не добавляет сообщение в историю.
+        Он молча выполняет свою работу и обновляет 'filters' в состоянии.
+        Отладочный print остается.
+        """
+        print("\n--- Узел: get_keys ---")
+        sys_prompt = SystemMessage(content=self.config["filters_search"])
         validated_instruction = state.get('final_instruction')
-        validated_instruction_human = HumanMessage(validated_instruction)
+        
+        if not validated_instruction:
+            print("Фильтры не найдены (нет инструкции).")
+            return {"filters": {}} # Просто возвращаем пустые фильтры
 
-        filters = self.llm.invoke([sys_prompt, validated_instruction_human]).content
-        if filters:
-            filters_and_keys = search_of_near_vectors(filters.split(','))
-            message = AIMessage(f'Найдены ключи для фильтров: {filters_and_keys}')
+        validated_instruction_human = HumanMessage(validated_instruction)
+        
+        filters_str = self.llm.invoke([sys_prompt, validated_instruction_human]).content
+        if filters_str and not filters_str.isspace():
+            filters_and_keys = search_of_near_vectors(filters_str.split(','))
+            print(f'Найдены ключи для фильтров: {filters_and_keys}')
         else:
             filters_and_keys = {}
-            message = AIMessage('Фильтры не найдены')
+            print('Фильтры не найдены')
 
-        print(message.content)
-        return {"messages": [message], "filters": filters_and_keys}
+        # Возвращаем ТОЛЬКО обновленное состояние, без "messages"
+        return {"filters": filters_and_keys}
 
-    def generate_sql_query(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], str, None]]:
-        print(f"\n--- Узел: generate_sql_query ---")
+    def generate_sql_query(self, state: MessagesState) -> Dict:
+        """
+        ИЗМЕНЕНИЕ (п. 3): В этот узел перенесена логика применения ограничений.
+        1. Генерируется "сырой" SQL-запрос.
+        2. К нему применяется функция apply_restrictions.
+        3. В состояние сохраняется финальный SQL и флаг о том, были ли применены ограничения.
+        """
+        print("\n--- Узел: generate_sql_query (с применением ограничений) ---")
         validated_instruction = state.get('final_instruction')
         filters = state.get('filters')
-        # Инициализируем флаг ограничений как False
+        user_id = state.get('user_id')
+        
+        # Инициализация выходного состояния
         output_state = {"messages": [], "restrictions_applied": False}
 
         if not validated_instruction:
-             print("Ошибка: Валидированная инструкция отсутствует в состоянии.")
+             print("Ошибка: Валидированная инструкция отсутствует.")
              output_state["messages"] = [AIMessage(content="-- SQL generation skipped (no instruction) --")]
              return output_state
 
         print(f"Инструкция для генерации SQL: {validated_instruction}")
+        sys_msg_content = self.config["generate_sql_query"].replace("<otgruzki_structure>", self.db_schema)
+        conversation = [
+            SystemMessage(sys_msg_content), 
+            HumanMessage(f"Описание запроса: {validated_instruction}\nФильтры: {filters}")
+        ]
 
-        sys_msg_content = self.config["generate_sql_query"]
-
-        sys_msg_content = sys_msg_content.replace("<otgruzki_structure>", self.db_schema)
-
-        conversation = [SystemMessage(sys_msg_content), HumanMessage(f"Описание запроса: {validated_instruction}\nФильтры: {filters}")]
-
-        print("Вызов LLM для генерации SQL...")
+        # --- Шаг 1: Генерация "сырого" SQL ---
         try:
+            print("Вызов LLM для генерации SQL...")
             response = self.llm.invoke(conversation)
             sql_query = response.content.strip()
             if sql_query.startswith("```sql"): sql_query = sql_query[6:]
             if sql_query.endswith("```"): sql_query = sql_query[:-3]
             sql_query = sql_query.strip()
-
-            print(f"Сгенерирован SQL: \n{sql_query}")
-            output_state["messages"] = [AIMessage(content=sql_query)]
+            print(f"Сгенерирован сырой SQL: \n{sql_query}")
         except Exception as e:
             print(f"Ошибка при вызове LLM в generate_sql_query: {e}")
             output_state["messages"] = [AIMessage(content=f"Произошла ошибка при генерации SQL: {e}")]
-
-        return output_state # Возвращаем только сообщения и флаг по умолчанию
-
-    def _apply_sql_restrictions(self, state: MessagesState) -> Dict[str, Union[List[BaseMessage], bool]]:
-        """Узел графа для применения ограничений к сгенерированному SQL."""
-        print(f"\n--- Узел: apply_sql_restrictions ---")
-        current_messages = state['messages']
-        user_id = state.get('user_id')
-        report_id = state.get('report_id')
-        # Инициализируем выходное состояние
-        output_state = {"messages": current_messages, "restrictions_applied": False}
-
-        # Ищем последний AIMessage, который должен содержать SQL
-        sql_query = ""
-        sql_message_index = -1
-        for i in range(len(current_messages) - 1, -1, -1):
-            msg = current_messages[i]
-            if isinstance(msg, AIMessage):
-                # Проверяем, не является ли это сообщением об ошибке/пропуске/отмене
-                content_lower = msg.content.lower()
-                if "sql generation skipped" not in content_lower and \
-                   "ошибка при генерации sql" not in content_lower and \
-                   "операция отменена" not in content_lower:
-                    sql_query = msg.content.strip()
-                    sql_message_index = i
-                    break
-                else:
-                    # Нашли сообщение об ошибке/пропуске/отмене, дальше искать SQL не нужно
-                    print("Предыдущий узел не вернул SQL-запрос. Ограничения не применяются.")
-                    return output_state # Просто передаем дальше
-
-        if not sql_query or sql_message_index == -1:
-            print("Не найден SQL-запрос в предыдущих сообщениях. Ограничения не применяются.")
-            # Это может случиться, если validate_instruction вернул отмену
             return output_state
 
+        # --- Шаг 2: Применение ограничений (логика из удаленного узла) ---
         if not user_id:
-            print("Критическая ошибка: user_id отсутствует в состоянии. Ограничения не могут быть применены.")
-            # В идеале user_id должен всегда присутствовать на этом этапе
-            # Можно добавить сообщение об ошибке
-            error_msg = AIMessage(content="-- Ошибка: Не удалось применить ограничения доступа (отсутствует ID пользователя) --")
-            output_state["messages"] = current_messages[:sql_message_index] + [error_msg] + current_messages[sql_message_index+1:]
-            return output_state
+            print("Критическая ошибка: user_id отсутствует. Ограничения не могут быть применены.")
+            final_sql = sql_query
+            restrictions_applied_flag = False
+        else:
+            print(f"Применение ограничений для user='{user_id}'...")
+            try:
+                final_sql, restrictions_applied_flag = apply_restrictions(sql_query, user_id)
+                if restrictions_applied_flag:
+                    print(f"Ограничения успешно применены. Итоговый SQL:\n{final_sql}")
+                else:
+                    print("Ограничения не были применены (не требуется или ошибка в apply_restrictions).")
+            except Exception as e:
+                print(f"Ошибка при применении ограничений: {e}")
+                final_sql = sql_query # В случае ошибки используем исходный запрос
+                restrictions_applied_flag = False
 
-        if not report_id:
-             print("Предупреждение: report_id отсутствует в состоянии. Используется 'default_report'.")
-             report_id = "default_report" # Устанавливаем значение по умолчанию
-
-        print(f"Применение ограничений для user='{user_id}', report='{report_id}' к SQL:\n{sql_query}")
-
-        # Вызываем основную логику
-        restricted_sql, restrictions_applied = apply_restrictions(sql_query, user_id)
-
-        # Заменяем исходный SQL в списке сообщений на модифицированный
-        # или оставляем исходный, если были ошибки
-        new_messages = list(current_messages) # Создаем копию списка
-        new_messages[sql_message_index] = AIMessage(content=restricted_sql)
-
-        output_state["messages"] = new_messages
-        output_state["restrictions_applied"] = restrictions_applied # Сохраняем флаг
-
+        # --- Шаг 3: Обновление состояния ---
+        output_state["messages"] = [AIMessage(content=final_sql)]
+        output_state["restrictions_applied"] = restrictions_applied_flag
+        
         return output_state
 
     def comment_sql_query(self, state: MessagesState) -> Dict[str, List[BaseMessage]]:
-        """Генерирует комментарий к (возможно ограниченному) SQL-запросу."""
+        """
+        ИЗМЕНЕНИЕ (п. 4): Улучшена логика формирования итогового ответа.
+        Теперь разделитель "===" будет всегда, даже если генерация комментария не удалась.
+        """
         print(f"\n--- Узел: comment_sql_query ---")
         current_messages = state['messages']
-        final_instruction = state.get('final_instruction')
-        restrictions_applied = state.get('restrictions_applied', False) # Получаем флаг
-        output_state = {"messages": []}
-
-        # Ищем последний AIMessage (должен быть SQL или сообщение об ошибке/пропуске)
-        last_message = None
+        final_instruction = state.get('final_instruction', "[Инструкция не найдена]")
+        restrictions_applied = state.get('restrictions_applied', False)
+        
         sql_query = ""
+        # Ищем последний AIMessage, который должен содержать итоговый SQL
         if current_messages and isinstance(current_messages[-1], AIMessage):
-             last_message = current_messages[-1]
-             content_lower = last_message.content.lower()
-             # Проверяем на ошибки/пропуски/отмены из предыдущих шагов
-             if "sql generation skipped" not in content_lower and \
-                "ошибка при генерации sql" not in content_lower and \
-                "ошибка: не удалось применить ограничения" not in content_lower and \
-                "операция отменена" not in content_lower:
-                sql_query = last_message.content.strip()
-             else:
-                 print("SQL-запрос не найден или была ошибка/отмена на предыдущем шаге. Комментарий не будет сгенерирован.")
-                 # Возвращаем последнее сообщение (ошибку/пропуск/отмену) как финальный ответ
-                 output_state["messages"] = [last_message]
-                 return output_state
-        else:
-             print("Критическая ошибка: Не найдено финальное сообщение AIMessage для комментирования.")
-             # Возвращаем текущие сообщения или сообщение об ошибке
-             output_state["messages"] = current_messages + [AIMessage(content="-- Ошибка: Не удалось сгенерировать финальный комментарий --")]
-             return output_state
+            content_lower = current_messages[-1].content.lower()
+            if "error" not in content_lower and "skipped" not in content_lower:
+                sql_query = current_messages[-1].content.strip()
+        
+        if not sql_query:
+            print("SQL-запрос не найден или была ошибка. Комментарий не будет сгенерирован.")
+            # Возвращаем последнее сообщение (вероятно, об ошибке) как есть
+            return {"messages": current_messages}
 
-
-        if not final_instruction:
-            print("Предупреждение: Исходная инструкция не найдена в состоянии. Комментарий может быть неполным.")
-            # Попробуем найти исходный запрос пользователя как fallback
-            for msg in reversed(current_messages[:-1]):
-                if isinstance(msg, HumanMessage):
-                    final_instruction = msg.content # Используем последний запрос пользователя
-                    break
-            if not final_instruction:
-                final_instruction = "[Инструкция не найдена]"
-
-
-        print(f"SQL для комментирования (после ограничений, если были):\n{sql_query}")
+        print(f"SQL для комментирования:\n{sql_query}")
         print(f"На основе инструкции: {final_instruction}")
         print(f"Ограничения применены: {restrictions_applied}")
 
         sys_msg_content = self.config["comment_sql_query"]
-
         human_msg_content = (
             f"Вопрос пользователя:\n{final_instruction}\n\n"
-            f"Структура данных, которые будут извлечены для ответа (используй алиасы из этой структуры как плейсхолдеры <Алиас>, а условия WHERE для контекста ответа):\n{sql_query}\n\n"
+            f"Структура данных, которые будут извлечены для ответа:\n{sql_query}\n\n"
             f"Флаг применения ограничений видимости (restrictions_applied): {restrictions_applied}\n\n"
-            "Сгенерируй шаблон ответа для пользователя согласно правилам из системной инструкции. Шаблон должен содержать плейсхолдеры в угловых скобках, соответствующие алиасам из предоставленной структуры."
+            "Сгенерируй шаблон ответа для пользователя согласно правилам."
         )
 
-        conversation = [
-            SystemMessage(content=sys_msg_content),
-            HumanMessage(content=human_msg_content)
-        ]
+        conversation = [SystemMessage(sys_msg_content), HumanMessage(human_msg_content)]
 
-        print("Вызов LLM для генерации комментария...")
+        comment = ""
         try:
+            print("Вызов LLM для генерации комментария...")
             response = self.llm.invoke(conversation)
             comment = response.content.strip()
             print(f"Сгенерирован комментарий: {comment}")
-
-            # Мы хотим, чтобы финальным сообщением был именно комментарий
-            # SQL-запрос уже есть в истории сообщений state['messages'][-1]
-            # Поэтому возвращаем только комментарий
-            output_state["messages"] = [AIMessage(content=sql_query+"\n"+"="*3+"\n"+comment)]
         except Exception as e:
             print(f"Ошибка при вызове LLM в comment_sql_query: {e}")
-            # Возвращаем сообщение об ошибке вместо комментария
-            output_state["messages"] = [AIMessage(content=f"Произошла ошибка при генерации комментария: {e}")]
+            comment = f"-- Ошибка при генерации комментария: {e} --"
 
-        return output_state
-
+        # ИЗМЕНЕНИЕ (п. 4): Гарантируем наличие разделителя "==="
+        if not comment or comment.isspace():
+            comment = "-- Комментарий не был сгенерирован. --"
+            
+        final_content = f"{sql_query}\n===\n{comment}"
+        
+        return {"messages": [AIMessage(content=final_content)]}
 
     # --- Сборка графа ---
     def _build_graph(self) -> StateGraph:
+        """
+        ИЗМЕНЕНИЕ (п. 3): Граф обновлен. Узел apply_sql_restrictions удален.
+        """
         workflow = StateGraph(MessagesState)
 
-        workflow.add_node("validate_instruction",   self.validate_instruction)
-        workflow.add_node("generate_sql_query",     self.generate_sql_query)
-        workflow.add_node("apply_sql_restrictions", self._apply_sql_restrictions)
-        workflow.add_node("comment_sql_query",      self.comment_sql_query)
-        workflow.add_node("get_keys",               self.get_keys)
-
+        workflow.add_node("validate_instruction", self.validate_instruction)
+        workflow.add_node("get_keys", self.get_keys)
+        workflow.add_node("generate_sql_query", self.generate_sql_query)
+        # УДАЛЕНО: workflow.add_node("apply_sql_restrictions", self._apply_sql_restrictions)
+        workflow.add_node("comment_sql_query", self.comment_sql_query)
+        
         workflow.set_entry_point("validate_instruction")
 
         def route_after_validation(state: MessagesState):
@@ -438,91 +344,52 @@ class GPTAgent:
             "validate_instruction",
             route_after_validation,
             {
-                "clarify": END,
-                "proceed": "get_keys"
+                "clarify": END,      # Если нужны уточнения, завершаем работу
+                "proceed": "get_keys"  # Если все хорошо, ищем ключи-фильтры
             }
         )
 
-        workflow.add_edge("get_keys",     "generate_sql_query")
-        workflow.add_edge("generate_sql_query",     "apply_sql_restrictions")
-        workflow.add_edge("apply_sql_restrictions", "comment_sql_query")
-        workflow.add_edge("comment_sql_query",      END)
+        workflow.add_edge("get_keys", "generate_sql_query")
+        # ИЗМЕНЕНИЕ: Прямая связь от генерации к комментированию
+        workflow.add_edge("generate_sql_query", "comment_sql_query")
+        # УДАЛЕНО: workflow.add_edge("apply_sql_restrictions", "comment_sql_query")
+        workflow.add_edge("comment_sql_query", END)
+        
         return workflow
 
-
-    # --- Функция для запуска диалога ---
+    # --- Функция для запуска диалога (без изменений) ---
     def run(self, user_id: str, message: str, report_id: Optional[str] = "default_report") -> Optional[Dict]:
-        """
-        Запускает или продолжает диалог для указанного user_id,
-        передавая user_id и report_id в состояние графа.
-        Использует invoke.
-        """
         thread_id = f"user_{user_id}_{report_id}"
         config = {"configurable": {"thread_id": thread_id}}
 
         print(f"\n===== Диалог для {thread_id} (User: {user_id}, Report: {report_id}) =====")
         print(f"Пользователь: {message}")
 
-        input_messages = []
-        # Добавляем текущее сообщение пользователя
-        input_messages.append(HumanMessage(content=message))
-
         input_data = {
-            "messages": input_messages,
+            "messages": [HumanMessage(content=message)],
             "user_id": user_id,
             "report_id": report_id
         }
 
         print("\nЗапуск графа (используя invoke)...")
         final_state_values = None
-        final_result_message = None
         try:
-            # Выполняем граф и получаем итоговое состояние
-            # invoke сам загрузит состояние из чекпоинтера, если оно есть
             final_state_values = self.compiled_agent.invoke(input_data, config=config)
-
-            # Проверяем результат invoke
+            
+            print("\n--- Итоговый ответ ---")
             if final_state_values and final_state_values.get('messages'):
                 final_result_message = final_state_values['messages'][-1]
+                print(f"Агент:\n{final_result_message.content}")
             else:
-                 print("Предупреждение: Итоговое состояние от invoke не содержит сообщений или пустое.")
-                 if not final_state_values: final_state_values = {} # Инициализация для избежания ошибок
+                print("Агент: [Нет ответа или произошла ошибка выполнения графа]")
 
         except Exception as e:
             print(f"\n!!! Ошибка во время выполнения графа (invoke) для {thread_id}: {e}")
             traceback.print_exc()
-            # Если invoke упал, возможно, это был новый поток, попробуем добавить базовую историю
-            # (Это предположение, ошибка могла быть и по другой причине)
-            if self.base_history_messages:
-                 print("Попытка добавить базовую историю после ошибки invoke...")
-                 input_data["messages"] = self.base_history_messages + input_data["messages"]
-                 # Повторный вызов invoke не рекомендуется здесь, лучше просто вернуть ошибку
-            final_state_values = {"messages": [AIMessage(content=f"Ошибка выполнения: {e}")]} # Возвращаем состояние с ошибкой
-
-        print("\n--- Итоговый ответ ---")
-        if final_result_message and isinstance(final_result_message, AIMessage):
-             print(f"Агент: {final_result_message.content}")
-        elif final_result_message:
-             print(f"Агент (неожиданный тип ответа: {type(final_result_message)}): {final_result_message}")
-        else:
-            # Проверяем, есть ли сообщение об ошибке в последнем сообщении состояния
-            error_in_state = False
-            if final_state_values and final_state_values.get('messages'):
-                 # Убедимся, что messages не пустой список
-                 if final_state_values['messages']:
-                     last_msg = final_state_values['messages'][-1]
-                     # Проверяем, что это сообщение и оно содержит текст ошибки
-                     if hasattr(last_msg, 'content'):
-                         last_msg_content = last_msg.content.lower()
-                         if "ошибка" in last_msg_content or "skipped" in last_msg_content or "отменена" in last_msg_content:
-                              print(f"Агент: {last_msg.content}")
-                              error_in_state = True
-            if not error_in_state:
-                print(f"Агент: [Нет ответа или произошла ошибка выполнения графа]")
+            final_state_values = {"messages": [AIMessage(content=f"Ошибка выполнения: {e}")]}
 
         print(f"===== Конец диалога для {thread_id} =====")
         return final_state_values
 
-    # Добавим деструктор для попытки закрыть соединение при уничтожении объекта
     def __del__(self):
         self.close_connection()

@@ -12,7 +12,6 @@ DIALOG_CASH_DIR = os.path.join(DATA_DIR, "dialogs_cash") # Убедитесь, �
 CONFIG_FILE = os.path.join(CONF_DIR, "config.yaml")
 STRUCTURE_FILE = os.path.join(CONF_DIR, 'otgruzki_structure.yaml')
 DIVISIONS_FILE = os.path.join(CONF_DIR, 'divisions.txt')
-BASE_HISTORY_FILE = os.path.join(DIALOG_CASH_DIR, "history_base.json")
 CHECKPOINT_DB_FILE = os.path.join(DATA_DIR, "checkpoints.sqlite")
 
 # --- Функция для загрузки и кеширования агента ---
@@ -27,27 +26,12 @@ def load_gpt_agent():
         # Проверка и создание минимальных конфигурационных файлов, если их нет
         # Это упрощенная версия, чтобы избежать падения агента при первом запуске
         # В идеале, эти файлы должны быть подготовлены заранее.
-        dummy_files = {
-            BASE_HISTORY_FILE: "" # Пустой файл истории
-        }
-        for filepath, content in dummy_files.items():
-            if not os.path.exists(filepath):
-                try:
-                    with open(filepath, 'w', encoding='utf-8') as f:
-                        if isinstance(content, dict): yaml.dump(content, f)
-                        else: f.write(str(content))
-                    st.warning(f"Файл '{filepath}' не найден, создан пустой/демо файл. Проверьте его содержимое.")
-                except Exception as e_file:
-                    st.error(f"Не удалось создать файл '{filepath}': {e_file}")
-                    return None # Не можем продолжить без критических файлов
-
         load_dotenv()
 
         agent = GPTAgent(
             config_file=CONFIG_FILE,
             structure_file=STRUCTURE_FILE,
             divisions_file=DIVISIONS_FILE,
-            base_history_file=BASE_HISTORY_FILE,
             checkpoint_db=CHECKPOINT_DB_FILE
         )
         st.success("Агент успешно инициализирован.")
