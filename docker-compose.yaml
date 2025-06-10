@@ -1,0 +1,15 @@
+services:
+  gpt-db:
+    build:
+      context: .
+      args:
+        - SHTTP_PROXY=${SHTTP_PROXY}
+        - SHTTPS_PROXY=${SHTTPS_PROXY}
+    container_name: gpt-db
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./model_data:/app
