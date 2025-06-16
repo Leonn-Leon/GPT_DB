@@ -1,0 +1,63 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  TAG_LATEST: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:latest
+  TAG_COMMIT: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:$CI_COMMIT_SHORT_SHA
+  PYTHON_VERSION: "3.11"
+
+# Run basic tests and linting
+test:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  script:
+    - pip install poetry==$POETRY_VERSION
+    - poetry config virtualenvs.in-project true
+    - poetry install --only main
+    - echo "Running basic tests..."
+    - poetry run python -c "import streamlit; import gpt_db; print('Import test successful')"
+  only:
+    - main
+    - merge_requests
+
+docker-build:
+  stage: build
+  image: docker:latest
+  variables:
+    DOCKER_HOST: tcp://docker:2375 
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+  services:
+    - name: docker:dind
+      alias: docker
+      command: ["--tls=false"]
+
+  before_script:
+    - echo "Logging in to Docker Registry..."
+    - docker login -u $CI_TKN_LN -p $CI_TKN_PW $CI_REGISTRY
+  script:
+    - echo "Building Docker image with build arguments..."
+    - docker logout
+    - docker build --pull --build-arg SHTTP_PROXY=$SHTTP_PROXY --build-arg SHTTPS_PROXY=$SHTTPS_PROXY --build-arg REDIS_HOST=$REDIS_HOST --build-arg REDIS_PORT=$REDIS_PORT --build-arg AMQP_URL=$AMQP_URL --build-arg CLICKHOUSE_HOST=$CLICKHOUSE_HOST  --build-arg DB_USER=$DB_USER --build-arg DB_PASS=$DB_PASS --build-arg DB_DATABASE=$DB_DATABASE -t $TAG_LATEST .
+    - docker login -u $CI_TKN_LN -p $CI_TKN_PW $CI_REGISTRY
+    - docker images
+    - echo "Tagging Docker image with commit hash..."
+    - docker tag $TAG_LATEST $TAG_COMMIT
+    - echo "Pushing images to Docker Registry..."
+    - docker push $TAG_LATEST
+    - docker push $TAG_COMMIT
+  only:
+    - main
+    - tags
+
+deploy:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Deployment would happen here. Currently configured as a placeholder."
+  only:
+    - main
+    - tags
+  when: manual
