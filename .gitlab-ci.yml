@@ -14,10 +14,10 @@ test:
  stage: test
  image: python:3.11-slim
  cache:
- key: poetry-$CI_COMMIT_REF_NAME
- paths:
- - .venv/
- - poetry.lock
+  key: poetry-$CI_COMMIT_REF_NAME
+  paths:
+   - .venv/
+   - poetry.lock
  before_script:
  - export HTTP_PROXY=$HTTP_PROXY
  - export HTTPS_PROXY=$HTTPS_PROXY
