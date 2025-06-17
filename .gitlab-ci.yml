@@ -84,9 +84,6 @@ docker-build:
   before_script:
    - echo $CI_REGISTRY
    - docker login -u $CI_TKN_LN -p $CI_TKN_PW $CI_REGISTRY
-   - export HTTP_PROXY=$HTTP_PROXY
-   - export HTTPS_PROXY=$HTTPS_PROXY
-   - export NO_PROXY=$NO_PROXY
   script:
     - docker logout
     #- docker build --pull --build-arg HTTP_PROXY=$SHTTP_PROXY --build-arg HTTPS_PROXY=$SHTTPS_PROXY -t $TAG_LATEST . 
