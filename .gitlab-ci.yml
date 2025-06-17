@@ -24,8 +24,6 @@ test:
  - export NO_PROXY=$NO_PROXY
  - pip install poetry==$POETRY_VERSION
  - poetry config virtualenvs.in-project true
- - poetry config http.proxy $HTTP_PROXY
- - poetry config http.https $HTTPS_PROXY
  - poetry install --only main
  script:
  - poetry run pytest
