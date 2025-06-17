@@ -31,6 +31,7 @@ test:
     paths:
       - .venv/
       - poetry.lock
+      - pyproject.toml
   before_script:
     - export HTTP_PROXY=$HTTP_PROXY
     - export HTTPS_PROXY=$HTTPS_PROXY
@@ -52,6 +53,7 @@ cleanup:
   script:
     - rm -rf.venv
     - rm poetry.lock
+    - rm pyproject.toml
   when: always
   except:
     - merge_requests
