@@ -18,8 +18,6 @@ setup_python_version:
       exit 1; fi
     - PYTHON_VERSION=$(cat.python-version)
     - echo "PYTHON_VERSION=$PYTHON_VERSION" > python-version.env
-  artifacts: null
-  reports: null
   dotenv: python-version.env
 test:
   stage: test
