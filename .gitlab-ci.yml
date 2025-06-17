@@ -18,7 +18,9 @@ setup_python_version:
       exit 1; fi
     - PYTHON_VERSION=$(cat.python-version)
     - echo "PYTHON_VERSION=$PYTHON_VERSION" > python-version.env
-  dotenv: python-version.env
+  artifacts:
+    reports:
+      dotenv: python-version.env
 test:
   stage: test
   image: python:$PYTHON_VERSION-slim
