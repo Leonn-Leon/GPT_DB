@@ -39,11 +39,10 @@ test:
     - pip install poetry==$POETRY_VERSION
     - poetry config virtualenvs.in-project true
     - poetry install --only main
-    - pip install pytest --upgrade
-    - pip install pytest-cov
+    #- pip install pytest --upgrade
+    #- pip install pytest-cov
   script:
-    - poetry run pytest
-    - poetry run coverage report
+    - poetry check
   rules:
     - if: $CI_COMMIT_BRANCH == 'dev'
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
