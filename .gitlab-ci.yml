@@ -1,8 +1,5 @@
 ---
 stages:
-  #- set_python_version
-  #- check_dependencies
-  #- cleanup
   - build
   
 variables:
