@@ -1,7 +1,7 @@
 ---
 stages:
   - setup
-  - test
+  - check_dependencies
   - cleanup
 variables:
   TAG_LATEST: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:latest
@@ -21,8 +21,8 @@ setup_python_version:
   artifacts:
     reports:
       dotenv: python-version.env
-test:
-  stage: test
+check_dependencies:
+  stage: check_dependencies
   image: python:$PYTHON_VERSION-slim
   needs:
     - job: setup_python_version
@@ -39,10 +39,11 @@ test:
     - pip install poetry==$POETRY_VERSION
     - poetry config virtualenvs.in-project true
     - poetry install --only main
-    #- pip install pytest --upgrade
-    #- pip install pytest-cov
+
   script:
     - poetry check
+    - poetry lock --check
+    - poetry show
   rules:
     - if: $CI_COMMIT_BRANCH == 'dev'
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
@@ -50,7 +51,7 @@ test:
 cleanup:
   stage: cleanup
   script:
-    - rm -rf.venv
+    - rm -rf .venv
     - rm poetry.lock
     - rm pyproject.toml
   when: always
@@ -59,5 +60,5 @@ cleanup:
 workflow:
   rules:
     - if: $CI_COMMIT_BRANCH == 'dev'
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
-    - if: $CI_COMMIT_BRANCH == 'master'
+    #- if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
+    #- if: $CI_COMMIT_BRANCH == 'master'
