@@ -1,49 +1,62 @@
+---
 stages:
- - test
- - cleanup
-
+  - setup
+  - test
+  - cleanup
 variables:
- TAG_LATEST: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:latest
- TAG_COMMIT: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:$CI_COMMIT_SHORT_SHA
- POETRY_VERSION: 2.1.1
- HTTP_PROXY: http://vproxy2.spk.ru:3128
- HTTPS_PROXY: http://vproxy2.spk.ru:3128
- NO_PROXY: localhost,127.0.0.1
-
+  TAG_LATEST: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:latest
+  TAG_COMMIT: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:$CI_COMMIT_SHORT_SHA
+  POETRY_VERSION: 2.1.1
+  HTTP_PROXY: http://vproxy2.spk.ru:3128
+  HTTPS_PROXY: http://vproxy2.spk.ru:3128
+  NO_PROXY: localhost,127.0.0.1
+setup_python_version:
+  stage: setup
+  image: alpine:latest
+  script:
+    - if [ ! -f.python-version ]; then echo "File .python-version not found";
+      exit 1; fi
+    - PYTHON_VERSION=$(cat.python-version)
+    - echo "PYTHON_VERSION=$PYTHON_VERSION" > python-version.env
+  artifacts: null
+  reports: null
+  dotenv: python-version.env
 test:
- stage: test
- image: python:3.11-slim
- cache:
-  key: poetry-$CI_COMMIT_REF_NAME
-  paths:
-   - .venv/
-   - poetry.lock
- before_script:
- - export HTTP_PROXY=$HTTP_PROXY
- - export HTTPS_PROXY=$HTTPS_PROXY
- - export NO_PROXY=$NO_PROXY
- - pip install poetry==$POETRY_VERSION
- - poetry config virtualenvs.in-project true
- - poetry install --only main
- script:
- - poetry run pytest
- - poetry run coverage report
- rules:
- - if: $CI_COMMIT_BRANCH == 'dev'
- - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
- - if: $CI_COMMIT_BRANCH == 'master'
-
+  stage: test
+  image: python:$PYTHON_VERSION-slim
+  needs:
+    - job: setup_python_version
+  cache:
+    key: poetry-$CI_COMMIT_REF_NAME
+    paths:
+      - .venv/
+      - poetry.lock
+  before_script:
+    - export HTTP_PROXY=$HTTP_PROXY
+    - export HTTPS_PROXY=$HTTPS_PROXY
+    - export NO_PROXY=$NO_PROXY
+    - pip install poetry==$POETRY_VERSION
+    - poetry config virtualenvs.in-project true
+    - poetry install --only main
+    - pip install pytest --upgrade
+    - pip install pytest-cov
+  script:
+    - poetry run pytest
+    - poetry run coverage report
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'dev'
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
+    - if: $CI_COMMIT_BRANCH == 'master'
 cleanup:
- stage: cleanup
- script:
- - rm -rf.venv
- - rm poetry.lock
- when: always
- except:
- - merge_requests
-
+  stage: cleanup
+  script:
+    - rm -rf.venv
+    - rm poetry.lock
+  when: always
+  except:
+    - merge_requests
 workflow:
- rules:
- - if: $CI_COMMIT_BRANCH == 'dev'
- - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
- - if: $CI_COMMIT_BRANCH == 'master'
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'dev'
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
+    - if: $CI_COMMIT_BRANCH == 'master'
