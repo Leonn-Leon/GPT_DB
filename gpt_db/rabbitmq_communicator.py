@@ -3,6 +3,7 @@ import aio_pika
 import asyncio
 import uuid
 import json
+import os
 
 class RabbitMQCommunicator:
     """
@@ -61,12 +62,17 @@ class RabbitMQCommunicator:
         self.futures[correlation_id] = future
 
         message = aio_pika.Message(
-            body=json.dumps(message_body).encode(),
+            body=json.dumps(message_body, ensure_ascii=False).encode('utf-8'),
             reply_to=self.callback_queue,
             correlation_id=correlation_id,
             content_type='application/json'
         )
-        await self.channel.default_exchange.publish(
+        
+        # 1. Получаем наш именованный обменник из .env
+        exchange = await self.channel.get_exchange(os.getenv("RMQ_EXCHANGE_NAME"))
+        
+        # 2. Публикуем сообщение в него, используя request_queue как routing_key
+        await exchange.publish(
             message,
             routing_key=self.request_queue
         )

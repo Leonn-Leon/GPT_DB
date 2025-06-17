@@ -1,76 +1,61 @@
 # syntax=docker/dockerfile:1.4
 
-# ЭТАП 1
-FROM python:3.11-slim AS builder
+# --- ЭТАП 1: Установщик зависимостей ---
+# Этот этап будет кешироваться очень агрессивно
+FROM python:3.11-slim AS deps-installer
 
-# 1. Аргументы для прокси, которые будут использоваться во время сборки
-ARG SHTTP_PROXY
-ARG SHTTPS_PROXY
-
-# 2. Настройка прокси для системных утилит (apt) и переменных окружения
-# Это самый надежный способ заставить все инструменты (apt, curl, pip, poetry) работать через прокси.
-RUN <<EOT
-#!/bin/bash
-set -e
-if [ -n "$SHTTP_PROXY" ]; then
-    echo "Acquire::http::Proxy \"${SHTTP_PROXY}\";" > /etc/apt/apt.conf.d/proxy.conf
-    echo "Acquire::https::Proxy \"${SHTTPS_PROXY}\";" >> /etc/apt/apt.conf.d/proxy.conf
-    export http_proxy="$SHTTP_PROXY"
-    export https_proxy="$SHTTPS_PROXY"
-fi
-EOT
-
-# 3. Установка системных пакетов, необходимых только для сборки
+# Установка системных зависимостей и Poetry
+# Этот слой будет пересобираться, только если изменится эта команда
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends build-essential curl && \
+    pip install --no-cache-dir "poetry==2.1.3" && \
+    rm -rf /var/lib/apt/lists/*
 
-# 4. Установка Poetry
-ENV POETRY_VERSION=2.1.3
-RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
-
+# Создаем директорию для нашего проекта
 WORKDIR /app
 
+# Копируем ТОЛЬКО файлы, описывающие зависимости.
+# Docker пересоберет следующий шаг, только если эти два файла изменятся.
 COPY pyproject.toml poetry.lock ./
 
+# Устанавливаем зависимости.
+# Этот слой, самый долгий, будет взят из кеша, если pyproject.toml и poetry.lock не менялись.
 RUN poetry config virtualenvs.in-project true && \
-    poetry install --only main --no-interaction --no-ansi
+    poetry install --no-interaction --no-ansi --no-root
 
-COPY . .
-
+# --- ЭТАП 2: Финальный образ ---
+# Этот этап будет выполняться быстрее
 FROM python:3.11-slim AS final
 
-# 1. Аргументы для прокси и конфигурации, которые нужны во время запуска
-ARG SHTTP_PROXY
-ARG SHTTPS_PROXY
-
+# Установка только тех системных пакетов, что нужны для работы
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ffmpeg \
-    libsm6 \
-    libxext6 \
-    && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends ffmpeg libsm6 libxext6 && \
+    rm -rf /var/lib/apt/lists/*
 
-# 3. Создание пользователя без прав root для безопасного запуска
+# Создаем пользователя без прав root
 RUN adduser --system --group --no-create-home appuser
 
-# 4. Копирование собранного проекта (код + .venv) из этапа "builder"
 WORKDIR /app
-COPY --from=builder --chown=appuser:appuser /app /app
 
-ENV PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH" \
-    SHTTP_PROXY=${SHTTP_PROXY} \
-    SHTTPS_PROXY=${SHTTPS_PROXY} 
+# Копируем УЖЕ УСТАНОВЛЕННЫЕ зависимости из предыдущего этапа
+COPY --from=deps-installer /app/.venv ./.venv
 
-# Переключение на пользователя без прав root
+# Используем pip из нашего виртуального окружения, чтобы установить streamlit
+RUN ./.venv/bin/pip install streamlit aio-pika python-dotenv
+
+# Копируем ВЕСЬ КОД нашего приложения.
+# Этот слой будет пересобираться при любом изменении кода, но это очень быстрая операция.
+COPY --chown=appuser:appuser . .
+
+# Настраиваем переменные окружения
+ENV POETRY_NO_INTERACTION=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+# Переключение на пользователя без прав root (рекомендуется раскомментировать для продакшена)
 # USER appuser
 
-# Открытие порта, на котором будет работать Streamlit
 EXPOSE 8501
 
-# 8. Команда для запуска приложения
-# Запускаем main.py, который, в свою очередь, должен запускать streamlit
-CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Команда для запуска
+CMD ["/app/.venv/bin/streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]

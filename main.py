@@ -4,10 +4,119 @@ import streamlit as st
 import os
 import yaml
 import uuid
-import traceback # ИЗМЕНЕНИЕ: импорт перенесен наверх для чистоты кода
+import traceback
+import asyncio
+import threading # Для фонового потока
+import aio_pika  # Для RabbitMQ
+import json
+from concurrent.futures import ThreadPoolExecutor
 
 from gpt_db.agent import GPTAgent
 
+# --- КОНФИГУРАЦИЯ RABBITMQ ---
+RMQ_URL = os.getenv("RMQ_URL")
+EXCHANGE_NAME = os.getenv("RMQ_EXCHANGE_NAME")
+INPUT_QUEUE_NAME = os.getenv("RMQ_INPUT_QUEUE")
+ROUTING_KEY = os.getenv("RMQ_ROUTING_KEY")
+
+# Пул потоков для выполнения синхронного кода агента в асинхронной среде
+executor = ThreadPoolExecutor(max_workers=os.cpu_count())
+
+class RabbitMQService:
+    def __init__(self, agent_instance: GPTAgent):
+        self.agent = agent_instance
+        self.loop = None
+        self.connection = None
+
+    async def on_message(self, msg: aio_pika.IncomingMessage):
+        """Обработчик входящих сообщений (почти без изменений)."""
+        async with msg.process():
+            try:
+                request_data = json.loads(msg.body.decode())
+                user_id = request_data.get("user_id", "default_user")
+                report_id = request_data.get("report_id", "default_report")
+                message = request_data.get("message", "")
+                print(f"[RabbitMQ] Получен запрос от user='{user_id}': '{message}'")
+
+                # Вызываем синхронный метод агента в отдельном потоке
+                response_state = await self.loop.run_in_executor(
+                    executor, self.agent.run, user_id, message, report_id
+                )
+
+                # Форматируем ответ
+                final_sql = None
+                final_comment = "Произошла ошибка или агент не дал ответа."
+                if response_state and response_state.get("messages"):
+                    last_message_obj = response_state["messages"][-1]
+                    if "===" in last_message_obj.content:
+                        parts = last_message_obj.content.split("===", 1)
+                        final_sql, final_comment = parts[0].strip(), parts[1].strip()
+                    else:
+                        final_sql, final_comment = None, last_message_obj.content.strip()
+
+                response_body = {"sql": final_sql, "comment": final_comment}
+                print(f"[RabbitMQ] Сформирован ответ: {json.dumps(response_body, ensure_ascii=False)}")
+
+                # Отправляем ответ обратно
+                if msg.reply_to and msg.correlation_id:
+                # Получаем канал из текущего соединения
+                    channel = await self.connection.channel()
+
+                    await channel.default_exchange.publish(
+                        aio_pika.Message(
+                            body=json.dumps(response_body).encode('utf-8'),
+                            correlation_id=msg.correlation_id,
+                            content_type='application/json'
+                        ),
+                        routing_key=msg.reply_to,
+                    )
+                    print(f"[RabbitMQ] Ответ отправлен в очередь '{msg.reply_to}'")
+                    
+                    await channel.close()
+
+            except Exception:
+                print("\n[RabbitMQ] !!! Произошла критическая ошибка при обработке сообщения:")
+                traceback.print_exc()
+
+    async def start_listening(self):
+        """Основной метод, который запускается в фоновом потоке."""
+        print("[RabbitMQ] Слушатель запускается в фоновом потоке...")
+        self.loop = asyncio.get_event_loop()
+        self.connection = await aio_pika.connect_robust(RMQ_URL, loop=self.loop)
+        
+        async with self.connection:
+            channel = await self.connection.channel()
+            await channel.set_qos(prefetch_count=1)
+            exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.DIRECT, durable=True)
+            queue = await channel.declare_queue(INPUT_QUEUE_NAME, durable=True)
+            await queue.bind(exchange, routing_key=ROUTING_KEY)
+
+            print(f"\n>>> [RabbitMQ] Сервис готов. Ожидание сообщений в очереди '{INPUT_QUEUE_NAME}'.")
+            await queue.consume(self.on_message)
+            
+            # Держим поток в рабочем состоянии
+            await asyncio.Future()
+
+    def run_in_background(self):
+        """
+        Запускает асинхронный слушатель в новом потоке,
+        правильно управляя циклом событий asyncio.
+        """
+        # Создаем новый цикл событий специально для этого потока
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            # Запускаем наш основной асинхронный метод в этом цикле
+            loop.run_until_complete(self.start_listening())
+        except Exception as e:
+            print(f"[RabbitMQ] Критическая ошибка в фоновом потоке: {e}")
+            traceback.print_exc()
+        finally:
+            # Корректно закрываем цикл после завершения
+            loop.close()
+        
+        
 # --- Константы путей (без изменений) ---
 DATA_DIR = os.path.join("gpt_db", "data")
 CONF_DIR = os.path.join(DATA_DIR, "confs")
@@ -46,6 +155,23 @@ st.title("Чат с SQL-Агентом")
 
 agent = load_gpt_agent()
 
+if 'rabbitmq_service_started' not in st.session_state:
+    if agent is not None:
+        print(">>> Попытка запуска RabbitMQ сервиса в фоновом потоке...")
+        # Создаем экземпляр нашего сервиса, передавая ему уже созданного агента
+        rabbitmq_service = RabbitMQService(agent_instance=agent)
+        
+        # Создаем и запускаем фоновый поток
+        thread = threading.Thread(target=rabbitmq_service.run_in_background, daemon=True)
+        thread.start()
+        
+        # Ставим флаг, что сервис запущен
+        st.session_state.rabbitmq_service_started = True
+        st.success("Фоновый сервис RabbitMQ запущен!")
+    else:
+        st.error("Агент не инициализирован, фоновый сервис RabbitMQ не может быть запущен.")
+        
+        
 if agent is None:
     st.warning("Агент не был загружен. Приложение не может продолжить работу.")
     st.stop()
