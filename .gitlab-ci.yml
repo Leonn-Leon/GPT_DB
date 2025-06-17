@@ -1,5 +1,8 @@
 ---
 stages:
+  - set_python_version
+  - check_dependencies
+  - cleanup
   - build
   
 variables:
@@ -22,6 +25,8 @@ setup_python_version:
   artifacts:
     reports:
       dotenv: python-version.env
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'test'
       
       
 check_dependencies:
@@ -47,7 +52,7 @@ check_dependencies:
     - poetry show --tree
     - poetry list
   rules:
-    - if: $CI_COMMIT_BRANCH == 'dev'
+    - if: $CI_COMMIT_BRANCH == 'test'
 
     
     
@@ -61,7 +66,7 @@ cleanup:
   needs:
     - job: check_dependencies
   rules:
-    - if: $CI_COMMIT_BRANCH == 'dev'
+    - if: $CI_COMMIT_BRANCH == 'test'
     
 
 docker-build:
