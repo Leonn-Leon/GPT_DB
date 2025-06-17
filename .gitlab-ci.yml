@@ -1,43 +1,52 @@
 stages:
-
-  - build
-
+ - test
+ - cleanup
 
 variables:
-  TAG_LATEST: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:latest
-  TAG_COMMIT: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:$CI_COMMIT_SHORT_SHA
-  PYTHON_VERSION: "3.11"
+ TAG_LATEST: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:latest
+ TAG_COMMIT: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:$CI_COMMIT_SHORT_SHA
+ POETRY_VERSION: 2.1.1
+ # Прокси настройки
+ HTTP_PROXY: http://proxy.server:8080
+ HTTPS_PROXY: http://proxy.server:8080
+ NO_PROXY: localhost,127.0.0.1
 
+test:
+ stage: test
+ image: python:3.11-slim
+ cache:
+ key: poetry-$CI_COMMIT_REF_NAME
+ paths:
+ -.venv/
+ - poetry.lock
+ before_script:
+ - export HTTP_PROXY=$HTTP_PROXY
+ - export HTTPS_PROXY=$HTTPS_PROXY
+ - export NO_PROXY=$NO_PROXY
+ - pip install poetry==$POETRY_VERSION
+ - poetry config virtualenvs.in-project true
+ - poetry config http.proxy $HTTP_PROXY
+ - poetry config http.https $HTTPS_PROXY
+ - poetry install --only main
+ script:
+ - poetry run pytest
+ - poetry run coverage report
+ rules:
+ - if: $CI_COMMIT_BRANCH == 'dev'
+ - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
+ - if: $CI_COMMIT_BRANCH == 'master'
 
+cleanup:
+ stage: cleanup
+ script:
+ - rm -rf.venv
+ - rm poetry.lock
+ when: always
+ except:
+ - merge_requests
 
-docker-build:
-  stage: build
-  image: docker:latest
-  variables:
-    DOCKER_HOST: tcp://docker:2375 
-    DOCKER_DRIVER: overlay2
-    DOCKER_TLS_CERTDIR: ""
-  services:
-    - name: docker:dind
-      alias: docker
-      command: ["--tls=false"]
-
-  before_script:
-    - echo "Logging in to Docker Registry..."
-    - docker login -u $CI_TKN_LN -p $CI_TKN_PW $CI_REGISTRY
-  script:
-    - echo "Building Docker image with build arguments..."
-    - docker logout
-    - docker build --pull --build-arg SHTTP_PROXY=$SHTTP_PROXY --build-arg SHTTPS_PROXY=$SHTTPS_PROXY --build-arg REDIS_HOST=$REDIS_HOST --build-arg REDIS_PORT=$REDIS_PORT --build-arg AMQP_URL=$AMQP_URL --build-arg CLICKHOUSE_HOST=$CLICKHOUSE_HOST  --build-arg DB_USER=$DB_USER --build-arg DB_PASS=$DB_PASS --build-arg DB_DATABASE=$DB_DATABASE -t $TAG_LATEST .
-    - docker login -u $CI_TKN_LN -p $CI_TKN_PW $CI_REGISTRY
-    - docker images
-    - echo "Tagging Docker image with commit hash..."
-    - docker tag $TAG_LATEST $TAG_COMMIT
-    - echo "Pushing images to Docker Registry..."
-    - docker push $TAG_LATEST
-    - docker push $TAG_COMMIT
-  only:
-    - main
-    - tags
-
-
+workflow:
+ rules:
+ - if: $CI_COMMIT_BRANCH == 'dev'
+ - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'master'
+ - if: $CI_COMMIT_BRANCH == 'master'
