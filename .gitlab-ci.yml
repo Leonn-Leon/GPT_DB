@@ -14,9 +14,9 @@ setup_python_version:
   stage: setup
   image: alpine:latest
   script:
-    - if [ ! -f.python-version ]; then echo "File .python-version not found";
+    - if [ ! -f .python-version ]; then echo "File .python-version not found";
       exit 1; fi
-    - PYTHON_VERSION=$(cat.python-version)
+    - PYTHON_VERSION=$(cat .python-version)
     - echo "PYTHON_VERSION=$PYTHON_VERSION" > python-version.env
   artifacts:
     reports:
