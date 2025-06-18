@@ -6,6 +6,12 @@ FROM python:3.11-slim AS deps-installer
 
 # Установка системных зависимостей и Poetry
 # Этот слой будет пересобираться, только если изменится эта команда
+
+RUN echo ${CI_REGISTRY}
+RUN echo $CI_REGISTRY 
+RUN echo "SHTTP_PROXY=${SHTTP_PROXY}" && echo "SHTTPS_PROXY=${SHTTPS_PROXY}"
+
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential curl && \
     pip install --no-cache-dir "poetry==2.1.3" && \
