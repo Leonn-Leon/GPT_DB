@@ -5,7 +5,7 @@ export
 # Основные команды
 build:
 	docker-compose build
-up:
+run:
 	docker-compose up -d
 down:
 	docker-compose down --remove-orphans

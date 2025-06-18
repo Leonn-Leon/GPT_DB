@@ -21,10 +21,12 @@ COPY pyproject.toml poetry.lock ./
 # Устанавливаем зависимости.
 # Этот слой, самый долгий, будет взят из кеша, если pyproject.toml и poetry.lock не менялись.
 RUN poetry config virtualenvs.in-project true && \
-    poetry install --no-interaction --no-ansi --no-root
+    poetry install --no-interaction --no-ansi --no-root --only main
+
+
+RUN find /app/.venv -name "__pycache__" -o -name "*.py[co]" | xargs rm -rf
 
 # --- ЭТАП 2: Финальный образ ---
-# Этот этап будет выполняться быстрее
 FROM python:3.11-slim AS final
 
 # Установка только тех системных пакетов, что нужны для работы

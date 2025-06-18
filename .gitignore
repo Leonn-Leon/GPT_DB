@@ -1,5 +1,5 @@
 .env
 cc.ru.300.bin
-cc.ru.300.bin.gz.part
+*.gz
 .venv/
 __pycache__/
