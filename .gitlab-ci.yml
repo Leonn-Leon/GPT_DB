@@ -1,8 +1,11 @@
 stages:
   - build
+  - deploy
 variables:
   TAG_LATEST: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:latest
   TAG_COMMIT: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:$CI_COMMIT_SHORT_SHA
+  
+  
 docker-build:
   only:
       refs:
@@ -33,3 +36,24 @@ docker-build:
     - docker tag $TAG_LATEST $CI_REGISTRY_IMAGE/master:latest
     - docker push $TAG_LATEST
 
+deploy:
+  only:
+    refs:
+      - dev
+      - master
+  image: alpine:latest
+  stage: deploy
+  before_script:
+    - apk update && apk add openssh-client    #для альпины
+    - chmod 400 $SSH_PRIVATE_KEY
+  script:
+    #- ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker stop roof_sauron > /dev/null 2>&1" || FAILED=true
+    #- ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker rm roof_sauron > /dev/null 2>&1" || FAILED=true
+    #- ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker rm roof_sauron > /dev/null 2>&1" || FAILED=true
+    #- ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker rmi -f $CI_REGISTRY_IMAGE/main:latest > /dev/null 2>&1" || FAILED=true
+   #- ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker images"
+    #- ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker ps -a"
+    #- ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker login $CI_REGISTRY -u $CI_TKN_LN -p $CI_TKN_PW"
+    #- ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker pull $TAG_LATEST"
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker images"
+   # - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker run -d --env-file roof_sauron.env --name roof_sauron $CI_REGISTRY_IMAGE/main:latest"
