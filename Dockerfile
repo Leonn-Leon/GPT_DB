@@ -7,7 +7,6 @@ FROM python:3.11-slim AS deps-installer
 # Установка системных зависимостей и Poetry
 # Этот слой будет пересобираться, только если изменится эта команда
 
-RUN echo ${CI_REGISTRY}
 RUN echo $CI_REGISTRY 
 RUN echo "SHTTP_PROXY=${SHTTP_PROXY}" && echo "SHTTPS_PROXY=${SHTTPS_PROXY}"
 
@@ -67,6 +66,8 @@ ENV RMQ_URL=$RMQ_URL
 ENV OPENAI_API_KEY=$OPENAI_API_KEY
 
 ENV RMQ_EXCHANGE_NAME=$RMQ_EXCHANGE_NAME
+
+RUN echo $RMQ_INPUT_QUEUE
 ENV RMQ_INPUT_QUEUE=$RMQ_INPUT_QUEUE
 ENV RMQ_ROUTING_KEY=$RMQ_ROUTING_KEY
 
