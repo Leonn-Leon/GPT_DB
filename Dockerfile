@@ -60,6 +60,16 @@ ENV POETRY_NO_INTERACTION=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
+ENV HTTP_PROXY=${SHTTP_PROXY}
+ENV HTTPS_PROXY=${SHTTPS_PROXY}
+ENV RMQ_URL=${RMQ_URL}
+
+ENV OPENAI_API_KEY=${OPENAI_API_KEY}
+
+ENV RMQ_EXCHANGE_NAME=${RMQ_EXCHANGE_NAME}
+ENV RMQ_INPUT_QUEUE=${RMQ_INPUT_QUEUE}
+ENV RMQ_ROUTING_KEY=${RMQ_ROUTING_KEY}
+
 # Переключение на пользователя без прав root (рекомендуется раскомментировать для продакшена)
 # USER appuser
 
