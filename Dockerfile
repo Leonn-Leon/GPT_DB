@@ -26,7 +26,7 @@ COPY pyproject.toml poetry.lock ./
 # Устанавливаем зависимости.
 # Этот слой, самый долгий, будет взят из кеша, если pyproject.toml и poetry.lock не менялись.
 RUN poetry config virtualenvs.in-project true && \
-    poetry install --no-interaction --no-ansi --no-root --only main
+    poetry install --no-interaction --no-ansi --only main
 
 
 RUN find /app/.venv -name "__pycache__" -o -name "*.py[co]" | xargs rm -rf
