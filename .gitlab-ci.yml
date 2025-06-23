@@ -55,4 +55,4 @@ deploy:
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker login $CI_REGISTRY -u $CI_TKN_LN -p $CI_TKN_PW"
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker pull $TAG_LATEST"
     - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker images"
-    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker run -d --env-file gpt_db.env --name gpt_db $CI_REGISTRY_IMAGE/main:latest"
+    - ssh -i $SSH_PRIVATE_KEY -o StrictHostKeyChecking=no admuser@$DAB_SERVER_IP "docker run -d --env-file gpt_db.env -p 8501:8501 --name gpt_db $CI_REGISTRY_IMAGE/main:latest"
