@@ -31,6 +31,8 @@ COPY README.md .
 # ---- ставим сам проект в то же .venv --------------------------------------
 RUN poetry install --no-interaction --no-ansi --only-root
 
+COPY main.py .
+
 # по желанию: лёгкая чистка мусора, но без strip *.so
 RUN find /app/.venv -name '__pycache__' -o -name '*.py[co]' | xargs rm -rf
 
