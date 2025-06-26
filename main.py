@@ -86,7 +86,7 @@ class RabbitMQService:
         async with self.connection:
             channel = await self.connection.channel()
             await channel.set_qos(prefetch_count=1)
-            exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.DIRECT, durable=True)
+            exchange = await channel.declare_exchange(EXCHANGE_NAME, aio_pika.ExchangeType.TOPIC, durable=True)
             queue = await channel.declare_queue(INPUT_QUEUE_NAME, durable=True)
             await queue.bind(exchange, routing_key=ROUTING_KEY)
 
