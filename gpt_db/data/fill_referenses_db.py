@@ -28,18 +28,30 @@ for name in csv_files:
 	with open(path_to_csv, 'r', encoding='utf-8') as file:
 		reader = csv.reader(file, delimiter=';')
 		next(reader) #skip head
-		result = [(row[0], row[1], serialize_float32(model.get_sentence_vector(row[1]))) for row in reader]	#model.encode
-
-	cursor.execute(f'''
-	CREATE TABLE IF NOT EXISTS {name} (
-	KEY TEXT PRIMARY KEY,
-	TXT TEXT,
-	VECTOR BLOB
-	)
-	''')
-
-	insert_query_for_zarm_auth_cfo = f'INSERT OR REPLACE INTO {name} (KEY, TXT, VECTOR) VALUES (?, ?, ?);'
-	cursor.executemany(insert_query_for_zarm_auth_cfo, result)
+		if name in ('ZDIV', 'ZCFO1'):
+			result = [(row[0], row[1], serialize_float32(model.get_sentence_vector(row[1])), row[2], serialize_float32(model.get_sentence_vector(row[2]))) for row in reader]	
+			cursor.execute(f'''
+			CREATE TABLE IF NOT EXISTS {name} (
+			KEY TEXT PRIMARY KEY,
+			TXT_1 TEXT,
+			VECTOR_1 BLOB,
+			TXT_2 TEXT,
+			VECTOR_2 BLOB
+			)
+			''')
+			insert_query_for_zarm_auth_cfo = f'INSERT OR REPLACE INTO {name} (KEY, TXT_1, VECTOR_1, TXT_2, VECTOR_2) VALUES (?, ?, ?, ?, ?);'
+			cursor.executemany(insert_query_for_zarm_auth_cfo, result)
+		else:
+			result = [(row[0], row[1], serialize_float32(model.get_sentence_vector(row[1]))) for row in reader]	
+			cursor.execute(f'''
+			CREATE TABLE IF NOT EXISTS {name} (
+			KEY TEXT PRIMARY KEY,
+			TXT_1 TEXT,
+			VECTOR_1 BLOB
+			)
+			''')
+			insert_query_for_zarm_auth_cfo = f'INSERT OR REPLACE INTO {name} (KEY, TXT_1, VECTOR_1) VALUES (?, ?, ?);'
+			cursor.executemany(insert_query_for_zarm_auth_cfo, result)
 
 connection.commit()
 connection.close()

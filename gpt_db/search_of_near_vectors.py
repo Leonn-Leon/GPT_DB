@@ -8,11 +8,7 @@ fasttext.util.download_model('ru', if_exists='ignore')
 model = fasttext.load_model('cc.ru.300.bin')
 path_to_db = Path(__file__).parent / 'data' / 'sqlite.db'
 
-def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str]]]:    #dict[str, list[tuple[str, float, str, str]]]r: Пользователь str
-    """Получает ключ и название справочника для каждой string из списка strings.
-    Аргументы:
-        strings: список строк list
-    """
+def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str]]]:
     if not strings: return []
     connection = sqlite3.connect(path_to_db)
     connection.enable_load_extension(True)
@@ -28,24 +24,34 @@ def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str]
         answer[string] = []
         embedding = model.get_sentence_vector(string)
         for name_of_table in names_of_tables:
-            row = connection.execute(
-                f"""
-                SELECT                    
-                    vec_distance_cosine(VECTOR, ?) as DISTANCE,                    
-                    TXT,
-                    KEY
-                FROM {name_of_table}
-                WHERE TXT != ''
-                ORDER BY DISTANCE
-                LIMIT 1
-                """,
-                (sqlite_vec.serialize_float32(embedding),)
-            ).fetchone()
-        
-            to_answer = (name_of_table,) + row
-            answer[string].append(to_answer)
-        answer[string].sort(key=lambda x: x[1])
-        answer[string] = (answer[string][0][0], answer[string][0][3]) #####new
+            
+            #необходимо для определения количества полей
+            cursor = connection.cursor()
+            cursor.execute(f"PRAGMA table_info({name_of_table})")
+            cnt_of_columns = len(cursor.fetchall())
+            cnt_of_vectors = cnt_of_columns // 2
+            
+            for i in range(1, cnt_of_vectors+1):
+                row = connection.execute(
+                    f"""
+                    SELECT                    
+                        vec_distance_cosine(VECTOR_{i}, ?) as DISTANCE,    
+                        KEY
+                    FROM {name_of_table}
+                    WHERE TXT_{i} != ''
+                    ORDER BY DISTANCE
+                    LIMIT 1
+                    """,
+                    (sqlite_vec.serialize_float32(embedding),)
+                ).fetchone()        
+
+                to_answer = (name_of_table,) + row
+                answer[string].append(to_answer)
+
+
+
+        answer[string].sort(key=lambda x: x[1]) #сортируем по DISTANCE
+        answer[string] = (answer[string][0][0], answer[string][0][2]) ##### тянем только название справочника и ключ
 
     connection.close()
     return answer
@@ -53,4 +59,5 @@ def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str]
 
 if __name__ == "__main__":
     test_query = ['Арматура десятка А400', 'Корнаухов Дмитрий Андреевич']
-    print(search_of_near_vectors(['Арматура десятка А400', 'Урал', '"Урал"']))
+    print(search_of_near_vectors(['Арматура десятка А400', 'ПВД', 'Урал']))
+
