@@ -58,5 +58,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 # USER appuser        # раскомментируйте в продакшене
 EXPOSE 8501
-
-CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+COPY rpc.py .
+#CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["python", "rpc.py"]
