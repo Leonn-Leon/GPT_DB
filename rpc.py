@@ -22,7 +22,11 @@ def callback(ch, method, props, body):
     message = request_data.get("message", "")
 
     response_ai = agent.run(user_id=user_id, message=message)
-    response = response_ai.get("message")[-1].get('content')
+    response = {
+        'content' : response_ai.get("messages")[-1].get('content'),
+        'sql' : response_ai.get("sql_query"),
+        'user_id' : response_ai.get("user_id")
+        }
     print('!!', response )
 
     ch.basic_publish(exchange='',
@@ -30,7 +34,7 @@ def callback(ch, method, props, body):
                      properties=pika.BasicProperties(
                                         correlation_id = props.correlation_id, 
                                         headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
-                     body=json.dumps(response).encode('utf-8'))
+                     body=response)
     
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
