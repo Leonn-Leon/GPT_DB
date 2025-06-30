@@ -23,7 +23,7 @@ def callback(ch, method, props, body):
 
     response_ai = agent.run(user_id=user_id, message=message)
     response = {
-        'content' : response_ai.get("messages")[-1].get('content'),
+        'content' : response_ai.get("messages")[-1].content,
         'sql' : response_ai.get("sql_query"),
         'user_id' : response_ai.get("user_id")
         }
