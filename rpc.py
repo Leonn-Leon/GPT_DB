@@ -12,8 +12,8 @@ routing_key = os.getenv("RMQ_ROUTING_KEY")
 
 connection = pika.BlockingConnection(pika.URLParameters(url))
 channel = connection.channel()
-channel.queue_declare(queue=queue, durable=True)
-channel.exchange_declare(exchange=exchange,  exchange_type="topic", durable=True)
+channel.queue_declare(queue=queue, durable=True) #passive=True
+channel.exchange_declare(exchange=exchange,  exchange_type="topic", durable=True) #passive=True
 channel.queue_bind(exchange=exchange, queue=queue, routing_key=routing_key)
 
 def callback(ch, method, props, body):
@@ -25,7 +25,9 @@ def callback(ch, method, props, body):
 
     ch.basic_publish(exchange='',
                      routing_key='getMessage.result', #props.reply_to,
-                     properties=pika.BasicProperties(rabbitmq_correlationId = props.rabbitmq_correlationId, headers={'rabbitmq_resp_correlationId': props.correlation_id}),
+                     properties=pika.BasicProperties(
+                                        #rabbitmq_correlationId = props.rabbitmq_correlationId, 
+                                        headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
                      body=response)
     
     ch.basic_ack(delivery_tag=method.delivery_tag)
