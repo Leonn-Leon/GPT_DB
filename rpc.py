@@ -21,13 +21,14 @@ def callback(ch, method, props, body):
     user_id = request_data.get("user_id", "default_user")
     message = request_data.get("message", "")
 
-    response = agent.run(user_id=user_id, message=message)
-    print('!!', 'props', props, 'response', response, )
+    response_ai = agent.run(user_id=user_id, message=message)
+    response = response_ai.get("message")[-1].get('content')
+    print('!!', response )
 
     ch.basic_publish(exchange='',
                      routing_key='getMessage.result', #props.reply_to,
                      properties=pika.BasicProperties(
-                                        #rabbitmq_correlationId = props.rabbitmq_correlationId, 
+                                        correlation_id = props.correlation_id, 
                                         headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
                      body=json.dumps(response).encode('utf-8'))
     
