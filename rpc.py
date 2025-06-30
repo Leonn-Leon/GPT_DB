@@ -27,9 +27,9 @@ def callback(ch, method, props, body):
         'sql' : response_ai.get("sql_query"),
         'user_id' : response_ai.get("user_id")
         }
-    print('!!', response )
+    print('PROPS: ', props )
 
-    ch.basic_publish(exchange='',
+    ch.basic_publish(exchange=exchange,
                      routing_key='getMessage.result', #props.reply_to,
                      properties=pika.BasicProperties(
                                         correlation_id = props.correlation_id, 
