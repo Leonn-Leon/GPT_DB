@@ -34,7 +34,7 @@ def callback(ch, method, props, body):
                      properties=pika.BasicProperties(
                                         correlation_id = props.correlation_id, 
                                         headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
-                     body=response)
+                     body=json.dumps(response).encode('utf-8'))
     
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
