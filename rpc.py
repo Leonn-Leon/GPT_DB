@@ -12,8 +12,8 @@ routing_key = os.getenv("RMQ_ROUTING_KEY")
 
 connection = pika.BlockingConnection(pika.URLParameters(url))
 channel = connection.channel()
-channel.queue_declare(queue=queue)
-channel.exchange_declare(exchange=exchange,  exchange_type="topic")
+channel.queue_declare(queue=queue, durable=True)
+channel.exchange_declare(exchange=exchange,  exchange_type="topic", durable=True)
 channel.queue_bind(exchange=exchange, queue=queue, routing_key=routing_key)
 
 def callback(ch, method, props, body):
