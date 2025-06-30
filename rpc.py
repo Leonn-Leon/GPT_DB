@@ -22,13 +22,14 @@ def callback(ch, method, props, body):
     message = request_data.get("message", "")
 
     response = agent.run(user_id=user_id, message=message)
+    print('!!', 'props', props, 'response', response, )
 
     ch.basic_publish(exchange='',
                      routing_key='getMessage.result', #props.reply_to,
                      properties=pika.BasicProperties(
                                         #rabbitmq_correlationId = props.rabbitmq_correlationId, 
                                         headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
-                     body=response)
+                     body=json.dumps(response).encode('utf-8'))
     
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
