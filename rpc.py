@@ -35,8 +35,8 @@ def callback(ch, method, props, body):
         'user_id' : response_ai.get("user_id")
         }
 
-    ch.basic_publish(exchange=exchange,
-                     routing_key='getMessage.result', #props.reply_to,
+    ch.basic_publish(exchange='', #exchange
+                     routing_key=props.reply_to, #props.reply_to, 'getMessage.result'
                      properties=pika.BasicProperties(
                                         correlation_id = props.correlation_id, 
                                         headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
