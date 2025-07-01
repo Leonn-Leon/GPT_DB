@@ -33,7 +33,7 @@ def callback(ch, method, props, body):
 
 
     user_id = request_data.get("user_id", "default_user")
-    message = request_data.get("message", "")
+    message = request_data.get("query_text", "привет")  #query_text
 
     response_ai = agent.run(user_id=user_id, message=message)
     response = {
