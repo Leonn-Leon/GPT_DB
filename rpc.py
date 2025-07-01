@@ -17,9 +17,14 @@ channel.exchange_declare(exchange=exchange,  exchange_type="topic", durable=True
 channel.queue_bind(exchange=exchange, queue=queue, routing_key=routing_key)
 
 def callback(ch, method, props, body):
-    print('ch!\n', ch, '\nmethod!\n', method, '\nprops!\n', props, '\nbody!\n', body, '\nend\n')
-    print('body.decode!\n', body.decode('utf-8'))
-    request_data = json.loads(body.decode('utf-8'))
+    #print('ch!\n', ch, '\nmethod!\n', method, '\nprops!\n', props, '\nbody!\n', body, '\nend\n')
+    print('body.decode:\n', body.decode('utf-8'))
+    try:
+        body_decode = body.decode('utf-8')
+        request_data = json.loads(body_decode)
+    except Exception as e:
+        print(e)
+        request_data = {}
     user_id = request_data.get("user_id", "default_user")
     message = request_data.get("message", "")
 
