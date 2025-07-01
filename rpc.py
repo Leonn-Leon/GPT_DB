@@ -17,20 +17,13 @@ channel.exchange_declare(exchange=exchange,  exchange_type="topic", durable=True
 channel.queue_bind(exchange=exchange, queue=queue, routing_key=routing_key)
 
 def callback(ch, method, props, body):
-    print('body.decode:\n', body.decode('utf-8'))
+    print('body.decode:', body.decode('utf-8'))
     try:
         body_decode = body.decode('utf-8')
         request_data = json.loads(body_decode)
     except Exception as e:
-        print('Ошибка: ', e)
-        ch.basic_publish(exchange=exchange,
-                     routing_key='getMessage.result', #props.reply_to,
-                     properties=pika.BasicProperties(
-                                        correlation_id = props.correlation_id, 
-                                        headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
-                     body=json.dumps({'error': type(e).__name__}))    
-        return
-
+        print('Ошибка! ', type(e).__name__)
+        request_data = {}
 
     user_id = request_data.get("user_id", "default_user")
     message = request_data.get("query_text", "привет")  #query_text
