@@ -12,19 +12,26 @@ routing_key = os.getenv("RMQ_ROUTING_KEY")
 
 connection = pika.BlockingConnection(pika.URLParameters(url))
 channel = connection.channel()
-channel.queue_declare(queue=queue, durable=True) #passive=True
-channel.exchange_declare(exchange=exchange,  exchange_type="topic", durable=True) #passive=True
+channel.queue_declare(queue=queue, durable=True) 
+channel.exchange_declare(exchange=exchange,  exchange_type="topic", durable=True)
 channel.queue_bind(exchange=exchange, queue=queue, routing_key=routing_key)
 
 def callback(ch, method, props, body):
-    #print('ch!\n', ch, '\nmethod!\n', method, '\nprops!\n', props, '\nbody!\n', body, '\nend\n')
     print('body.decode:\n', body.decode('utf-8'))
     try:
         body_decode = body.decode('utf-8')
         request_data = json.loads(body_decode)
     except Exception as e:
-        print(e)
-        request_data = {}
+        print('Ошибка: ', e)
+        ch.basic_publish(exchange=exchange,
+                     routing_key='getMessage.result', #props.reply_to,
+                     properties=pika.BasicProperties(
+                                        correlation_id = props.correlation_id, 
+                                        headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
+                     body=json.dumps({'error': e}))    
+        return
+
+
     user_id = request_data.get("user_id", "default_user")
     message = request_data.get("message", "")
 
@@ -34,7 +41,6 @@ def callback(ch, method, props, body):
         'sql' : response_ai.get("sql_query"),
         'user_id' : response_ai.get("user_id")
         }
-    print('PROPS: ', props )
 
     ch.basic_publish(exchange=exchange,
                      routing_key='getMessage.result', #props.reply_to,
