@@ -26,7 +26,7 @@ def callback(ch, method, props, body):
         request_data = {}
 
     user_id = request_data.get("user_id", "default_user")
-    message = request_data.get("query_text", "привет")  #query_text
+    message = request_data.get("query_text", "привет")  
 
     response_ai = agent.run(user_id=user_id, message=message)
     
@@ -41,12 +41,21 @@ def callback(ch, method, props, body):
 
         }
 
+
+    properties = pika.BasicProperties(
+        content_type='application/json',
+        content_encoding='utf-8'
+    )
     ch.basic_publish(exchange='', 
                      routing_key=props.reply_to, 
                      properties=pika.BasicProperties(
                                         correlation_id = props.correlation_id, 
-                                        headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
-                     body=json.dumps(response).encode('utf-8'))
+                                        headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')},
+                                        content_type='application/json',
+                                        content_encoding='utf-8'
+                                        ),
+                     body=json.dumps(response)
+                     )
     
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
