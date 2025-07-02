@@ -29,14 +29,20 @@ def callback(ch, method, props, body):
     message = request_data.get("query_text", "привет")  #query_text
 
     response_ai = agent.run(user_id=user_id, message=message)
+    
+    sql_query = response_ai.get("sql_query", '')
+    type = 'CLARIFICATION_QUESTION' if sql_query == '' else 'FINAL_ANSWER'
     response = {
         'content' : response_ai.get("messages")[-1].content,
-        'sql' : response_ai.get("sql_query"),
-        'user_id' : response_ai.get("user_id")
+        'sql_query' : sql_query,
+        'user_id' : response_ai.get("user_id", ''),
+        'comment' : 'test_comment',
+        'type' : type
+
         }
 
-    ch.basic_publish(exchange='', #exchange
-                     routing_key=props.reply_to, #props.reply_to, 'getMessage.result'
+    ch.basic_publish(exchange='', 
+                     routing_key=props.reply_to, 
                      properties=pika.BasicProperties(
                                         correlation_id = props.correlation_id, 
                                         headers={'rabbitmq_resp_correlationId': props.headers.get('rabbitmq_correlationId', '')}),
