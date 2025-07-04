@@ -57,7 +57,9 @@ ENV PATH="/app/.venv/bin:$PATH" \
     POETRY_NO_INTERACTION=1
 
 # USER appuser        # раскомментируйте в продакшене
-EXPOSE 8501
+#EXPOSE 8501
 COPY rpc.py .
+COPY agent_ver2.py .
+COPY promts.py .
 #CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
 CMD ["python", "rpc.py"]

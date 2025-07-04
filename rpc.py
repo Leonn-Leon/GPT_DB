@@ -1,4 +1,5 @@
-from gpt_db.agent import GPTAgent
+#from gpt_db.agent import GPTAgent
+from agent_ver2 import GPTAgent 
 import pika
 import os
 import json
@@ -30,22 +31,16 @@ def callback(ch, method, props, body):
 
     response_ai = agent.run(user_id=user_id, message=message)
     
-    sql_query = response_ai.get("sql_query", '')
-    type = 'CLARIFICATION_QUESTION' if sql_query == '' else 'FINAL_ANSWER'
+    type = 'CLARIFICATION_QUESTION' if response_ai.get("sql", '') == '' else 'FINAL_ANSWER'
     response = {
-        'content' : response_ai.get("messages")[-1].content,
-        'sql_query' : sql_query,
+        #'content' : response_ai.get("messages")[-1].content,
+        'question' : response_ai.get("question", ''),   #только в агенте2
+        'sql_query' : response_ai.get("sql", ''),
+        'comment' : response_ai.get("comment", ''),
         'user_id' : response_ai.get("user_id", ''),
-        'comment' : 'test_comment',
         'type' : type
-
         }
-
-
-    properties = pika.BasicProperties(
-        content_type='application/json',
-        content_encoding='utf-8'
-    )
+    
     ch.basic_publish(exchange='', 
                      routing_key=props.reply_to, 
                      properties=pika.BasicProperties(
