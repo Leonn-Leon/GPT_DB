@@ -34,7 +34,8 @@ def callback(ch, method, props, body):
     type = 'CLARIFICATION_QUESTION' if response_ai.get("sql", '') == '' else 'FINAL_ANSWER'
     response = {
         #'content' : response_ai.get("messages")[-1].content,
-        'question' : response_ai.get("question", ''),   #только в агенте2
+        #'question' : response_ai.get("question", ''),   #только в агенте2
+        'content' : response_ai.get("question", ''),   #только в агенте2
         'sql_query' : response_ai.get("sql", ''),
         'comment' : response_ai.get("comment", ''),
         'user_id' : response_ai.get("user_id", ''),

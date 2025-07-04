@@ -67,11 +67,11 @@ class GPTAgent:
         question = state["messages"][0]
         long_term_memory_of_inc_req = state['long_term_memory_of_inc_req']
         if len(long_term_memory_of_inc_req) >= 20:
-            to_long_term_memory_of_inc_req = [RemoveMessage(id=m.id) for m in long_term_memory_of_inc_req[:2]] + [question, response]
+            to_long_term_memory_of_inc_req = [RemoveMessage(id=m.id) for m in long_term_memory_of_inc_req[:2]] + [question, response]            
         else:
             to_long_term_memory_of_inc_req = [question, response]
 
-        return {"messages": [response], "long_term_memory_of_inc_req": to_long_term_memory_of_inc_req}
+        return {"messages": [response], "long_term_memory_of_inc_req": to_long_term_memory_of_inc_req, 'question': state["messages"][0].content}
 
     def _should_continue(self, state: State) -> Literal["get_keys", "cleaning_of_state"]:
         last_message = state["messages"][-1].content
@@ -94,7 +94,7 @@ class GPTAgent:
             filters_and_keys = {}
             message = AIMessage('Фильтры не найдены')
 
-        return {"messages": [message], "question": request, "filters": filters_and_keys}
+        return {"messages": [message], "filters": filters_and_keys}
 
     def _generate_sql(self, state: State, config: RunnableConfig):
         request = state['question']
