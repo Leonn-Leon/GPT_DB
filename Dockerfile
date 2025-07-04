@@ -60,6 +60,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
 #EXPOSE 8501
 COPY rpc.py .
 COPY agent_ver2.py .
-COPY promts.py .
+COPY prompts.py .
 #CMD ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]
 CMD ["python", "rpc.py"]
