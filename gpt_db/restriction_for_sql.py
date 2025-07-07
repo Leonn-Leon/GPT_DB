@@ -5,7 +5,10 @@ from pathlib import Path
 path_to_db = Path(__file__).parent / 'data' / 'sqlite.db'
 
 def apply_restrictions(sql_query, user):
-    parsed = parse_one(sql_query)
+    try:
+        parsed = parse_one(sql_query)
+    except Exception:
+        return sql_query, False
     connection = sqlite3.connect(path_to_db)
     connection.row_factory = sqlite3.Row
     cursor = connection.cursor()
