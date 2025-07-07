@@ -14,6 +14,7 @@ class State(TypedDict):
     messages: Annotated[list, add_messages]
     long_term_memory_of_inc_req: Annotated[list, add_messages]
     question: str
+    answer: str
     filters: dict
     sql: str
     comment: str
@@ -71,7 +72,7 @@ class GPTAgent:
         else:
             to_long_term_memory_of_inc_req = [question, response]
 
-        return {"messages": [response], "long_term_memory_of_inc_req": to_long_term_memory_of_inc_req, 'question': state["messages"][0].content}
+        return {"messages": [response], "long_term_memory_of_inc_req": to_long_term_memory_of_inc_req, 'question': state["messages"][0].content, 'answer': response.content}
 
     def _should_continue(self, state: State) -> Literal["get_keys", "cleaning_of_state"]:
         last_message = state["messages"][-1].content
@@ -124,6 +125,7 @@ class GPTAgent:
         return {
             "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)],
             'question': '',
+            'answer': '',
             'filters': '',
             'sql': '',
             'comment': ''
