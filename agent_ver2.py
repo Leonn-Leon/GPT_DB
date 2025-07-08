@@ -95,7 +95,7 @@ class GPTAgent:
             filters_and_keys = {}
             message = AIMessage('Фильтры не найдены')
 
-        return {"messages": [message], "filters": filters_and_keys}
+        return {"messages": [message], "filters": filters_and_keys, "question": request}
 
     def _generate_sql(self, state: State, config: RunnableConfig):
         request = state['question']
