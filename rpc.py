@@ -10,8 +10,9 @@ url= os.getenv("RMQ_URL")
 exchange = os.getenv("RMQ_EXCHANGE_NAME")
 queue = os.getenv("RMQ_INPUT_QUEUE")
 routing_key = os.getenv("RMQ_ROUTING_KEY")
+extra_params = '/?connection_attempts=0&retry_delay=10'
 
-connection = pika.BlockingConnection(pika.URLParameters(url))
+connection = pika.BlockingConnection(pika.URLParameters(url+extra_params))       
 channel = connection.channel()
 channel.queue_declare(queue=queue, durable=True) 
 channel.exchange_declare(exchange=exchange,  exchange_type="topic", durable=True)
