@@ -71,8 +71,8 @@ class GPTAgent:
             to_long_term_memory_of_inc_req = [RemoveMessage(id=m.id) for m in long_term_memory_of_inc_req[:2]] + [question, response]            
         else:
             to_long_term_memory_of_inc_req = [question, response]
-
-        return {"messages": [response], "long_term_memory_of_inc_req": to_long_term_memory_of_inc_req, 'question': state["messages"][0].content, 'answer': response.content}
+        #print(to_long_term_memory_of_inc_req)
+        return {"messages": [response], "long_term_memory_of_inc_req": to_long_term_memory_of_inc_req, 'question': question.content, 'answer': response.content}
 
     def _should_continue(self, state: State) -> Literal["get_keys", "cleaning_of_state"]:
         last_message = state["messages"][-1].content

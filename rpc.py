@@ -18,7 +18,6 @@ channel.exchange_declare(exchange=exchange,  exchange_type="topic", durable=True
 channel.queue_bind(exchange=exchange, queue=queue, routing_key=routing_key)
 
 def callback(ch, method, props, body):
-    print('body.decode:', body.decode('utf-8'))
     try:
         body_decode = body.decode('utf-8')
         request_data = json.loads(body_decode)
@@ -29,7 +28,10 @@ def callback(ch, method, props, body):
     user_id = request_data.get("user_id", "default_user")
     message = request_data.get("query_text", "привет")  
 
-    response_ai = agent.run(user_id=user_id, message=message)
+    try:
+        response_ai = agent.run(user_id=user_id, message=message)
+    except Exception as e:
+        response_ai = {'answer': type(e).__name__}
     
     type = 'CLARIFICATION_QUESTION' if response_ai.get("sql", '') == '' else 'FINAL_ANSWER'
     response = {
@@ -41,7 +43,8 @@ def callback(ch, method, props, body):
         'user_id' : response_ai.get("user_id", ''),
         'type' : type
         }
-    
+    print('Полный ответ:\n', response)
+
     ch.basic_publish(exchange='', 
                      routing_key=props.reply_to, 
                      properties=pika.BasicProperties(
