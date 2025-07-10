@@ -8,7 +8,7 @@ fasttext.util.download_model('ru', if_exists='ignore')
 model = fasttext.load_model('cc.ru.300.bin')
 path_to_db = Path(__file__).parent / 'data' / 'sqlite.db'
 
-def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str]]]:
+def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str, str]]]:
     if not strings: return []
     connection = sqlite3.connect(path_to_db)
     connection.enable_load_extension(True)
@@ -36,7 +36,8 @@ def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str]
                     f"""
                     SELECT                    
                         vec_distance_cosine(VECTOR_{i}, ?) as DISTANCE,    
-                        KEY
+                        KEY,
+                        TXT_{i}
                     FROM {name_of_table}
                     WHERE TXT_{i} != ''
                     ORDER BY DISTANCE
@@ -51,7 +52,7 @@ def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str]
 
 
         answer[string].sort(key=lambda x: x[1]) #сортируем по DISTANCE
-        answer[string] = (answer[string][0][0], answer[string][0][2]) ##### тянем только название справочника и ключ
+        answer[string] = (answer[string][0][0], answer[string][0][2], answer[string][0][3]) ##### тянем только название справочника, ключ и текст
 
     connection.close()
     return answer

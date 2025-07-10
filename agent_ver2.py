@@ -9,6 +9,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from typing import Annotated, Literal
 from prompts import system_message_1, system_message_2, system_message_3, system_message_4
 from langchain_core.runnables import RunnableConfig
+import logging
+#logging.basicConfig(level=logging.DEBUG)
 
 class State(TypedDict):
     messages: Annotated[list, add_messages]
@@ -24,14 +26,15 @@ class GPTAgent:
         self,
         model: str = "deepseek-chat-v3-0324",
         api_key: str = "sk-aitunnel-GGugVSWn9xV0xyATao3GruRiF3i0QF8z",
-        base_url: str = "https://api.aitunnel.ru/v1/",
-        temperature: float = 0
+        base_url: str = "https://api.aitunnel.ru/v1/"
     ):
         self.llm = ChatOpenAI(
             model=model,
             api_key=api_key,
             base_url=base_url,
-            temperature=temperature,
+            temperature=0, #sys.float_info.min
+            seed=0,
+            top_p=0
         )
         self.memory = MemorySaver()
         self.agent = self._build_agent()
@@ -148,10 +151,9 @@ class GPTAgent:
 
 if __name__ == "__main__":
     agent = GPTAgent()
-    
     while True:
         message = input("Добро пожаловать в АРМ. Задайте ваш вопрос: ")
         if message.lower() in ["quit", "exit", "q", "выход"]:
             print("До свидания!")
             break
-        print(agent.run(user_id='user2', message=message))
+        agent.run(user_id='user2', message=message)
