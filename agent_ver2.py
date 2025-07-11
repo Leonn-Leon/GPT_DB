@@ -1,5 +1,6 @@
 from langchain_openai import ChatOpenAI
 from gpt_db.restriction_for_sql import apply_restrictions
+from gpt_db.adding_txt_fields import add_txt_fields
 from gpt_db.search_of_near_vectors import search_of_near_vectors
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
@@ -108,6 +109,7 @@ class GPTAgent:
         sql = self.llm.invoke([system_message_3, message]).content
         user = config.get("configurable").get("thread_id")
         sql_with_restriction = apply_restrictions(sql, user)[0]
+        #sql_with_restriction = add_txt_fields(sql_with_restriction) # раскоментить, когда будут _TXT поля
         
         message = AIMessage(f'SQL сгенерирован:\n{sql_with_restriction}')
         return {"messages": [message], "sql": sql_with_restriction}
