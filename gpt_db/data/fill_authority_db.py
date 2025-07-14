@@ -17,6 +17,8 @@ data_for_zarm_auth_cfo = [
     ('user2', "(ZDIV = '03')"),
     ('user3', "(ZDIV = '01')"),
     ('user4', "(ZDIV = '01')"),
+    ('OPARINDV', ""), 
+    ('HODYKINVYU', "(ZCFO1 in ('4505','1002','1102','1303','1403','1502','2402',) or (ZDIV = '04'))"),
     ('user0', ""),
 ]
 insert_query_for_zarm_auth_cfo = """INSERT OR REPLACE INTO ZARM_AUTH_CFO (zuser, auth) VALUES (?, ?);"""

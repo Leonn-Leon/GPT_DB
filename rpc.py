@@ -42,6 +42,7 @@ def callback(ch, method, props, body):
         'sql_query' : response_ai.get("sql", ''),
         'comment' : response_ai.get("comment", ''),
         'user_id' : response_ai.get("user_id", ''),
+        'auth' : response_ai.get("auth", ''),
         'type' : type
         }
     print('Полный ответ:\n', response)

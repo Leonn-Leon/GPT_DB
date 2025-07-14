@@ -21,6 +21,7 @@ class State(TypedDict):
     filters: dict
     sql: str
     comment: str
+    auth: str
 
 class GPTAgent:
     def __init__(
@@ -108,11 +109,11 @@ class GPTAgent:
 
         sql = self.llm.invoke([system_message_3, message]).content
         user = config.get("configurable").get("thread_id")
-        sql_with_restriction = apply_restrictions(sql, user)[0]
+        sql_with_restriction, auth = apply_restrictions(sql, user)
         #sql_with_restriction = add_txt_fields(sql_with_restriction) # раскоментить, когда будут _TXT поля
         
         message = AIMessage(f'SQL сгенерирован:\n{sql_with_restriction}')
-        return {"messages": [message], "sql": sql_with_restriction}
+        return {"messages": [message], "sql": sql_with_restriction, "auth": auth}
 
     def _generate_comment(self, state: State):
         request = state['question']
@@ -126,14 +127,15 @@ class GPTAgent:
     
     def _cleaning_of_state(self, state: State):
         self.previous_state = state #сохраняем state перед его очисткой и сбросом агента
-            
+        
         return {
             "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)],
             'question': '',
             'answer': '',
             'filters': '',
             'sql': '',
-            'comment': ''
+            'comment': '',
+            "auth": ''
         }
 
     def run(self, user_id: str, message: str):
