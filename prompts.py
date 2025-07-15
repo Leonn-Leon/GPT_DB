@@ -94,12 +94,12 @@ system_prompt_3 = """
 Запрос:
     Описание: 'отгрузки вчера в СПК-Волгоград'
     Фильтры: 'СПК-Волгоград': ('ZCFO1', '0701','СПК-Волгоград')
-SQL: SELECT COUNT(DISTINCT VBRK_VBELN) FROM columnar.azsdm_1612 WHERE VBRK_FKDAT = {yesterday_date} AND ZCFO1 = '0701'
+SQL: SELECT COUNT(DISTINCT VBRK_VBELN) as VBRK_VBELN FROM columnar.azsdm_1612 WHERE VBRK_FKDAT = '{yesterday_date}' AND ZCFO1 = '0701'
 
 Запрос:
     Описание: 'выручка по листам'
     Фильтры: 'лист': ('ZPRODH01', '910', 'Лист')
-SQL: SELECT SUM(NETWR) FROM columnar.azsdm_1612 WHERE VBRK_FKDAT = {current_date} AND ZPRODH01 = '910'
+SQL: SELECT SUM(NETWR) as NETWR FROM columnar.azsdm_1612 WHERE VBRK_FKDAT = '{current_date}' AND ZPRODH01 = '910'
 
 Структура таблицы columnar.azsdm_1612:
 {struct_of_table}
