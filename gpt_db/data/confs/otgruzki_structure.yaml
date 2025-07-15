@@ -1,62 +1,62 @@
-    - description: "Номер фактуры, это тоже самое что отгрузка."
+    - description: ["отгрузка", "фактура", "номер отгрузки", "номер фактуры"]
       technical_name: "VBRK_VBELN"
       key: true
       type: "характеристика"
-    - description: "Номер позиции внутри фактуры."
+    - description: ["позиция", "номер позиции", "номер позиции внутри фактуры"]
       technical_name: "VBRP_POSNR"
       key: true
       type: "характеристика"
-    - description: "Дата в формате YYYYMMDD"
+    - description: ["дата"]
       technical_name: "VBRK_FKDAT"
-      type: "характеристика"
-    - description: "Вид сделки"
+      type: "характеристика (дата в формате YYYYMMDD)"
+    - description: ["вид сделки"]
       technical_name: "TYPE_ORDER"
       type: "характеристика"
-    - description: "Менеджер, ответственный за сделку"
+    - description: ["менеджер", "менеджер ответственный за зделку"]
       technical_name: "VBRK_ZZPERNR_ZM"
       type: "характеристика"
-    - description: "Категория материала"
+    - description: ["Категория материала"]
       technical_name: "ZPROD_CAT"
       type: "характеристика"
-    - description: "АГ0"
+    - description: ["АГ0", "Иерархия 0 уровня"]
       technical_name: "ZPRODH01"
       type: "характеристика"
-    - description: "АГ1"
+    - description: ["АГ1", "Иерархия 1 уровня"]
       technical_name: "ZPRODH11"
       type: "характеристика"
-    - description: "АГ2"
+    - description: ["АГ2", "Иерархия 2 уровня"]
       technical_name: "ZPRODH21"
       type: "характеристика"
-    - description: "АГ3"
+    - description: ["АГ3", "Иерархия 3 уровня"]
       technical_name: "ZPRODH31"
       type: "характеристика"
-    - description: "Дивизион"
+    - description: ["Дивизион"]
       technical_name: "ZDIV"
       type: "характеристика"
-    - description: "Филиал"
+    - description: ["Филиал"]
       technical_name: "ZCFO1"
       type: "характеристика"
-    - description: "Клиент"
+    - description: ["Клиент"]
       technical_name: "ZCUSTOMER"
       type: "характеристика"
-    - description: "Вид клиента"
-      technical_name: "BUT000_BPKIND"
+    - description: ["Вид клиента"]
+      technical_name: "BPKIND"
       type: "характеристика"
-    - description: "Отрасль"
+    - description: ["Отрасль"]
       technical_name: "INDUSTRY"
       type: "характеристика"
-    - description: "Статус клиента"
-      technical_name: "RELTYP"
+    - description: ["Статус клиента"]
+      technical_name: "RLTYP"
       type: "характеристика"
-    - description: "Отгруженное количество позиции в тоннах."
+    - description: ["отгружено","Отгруженное количество позиции в тоннах."]
       technical_name: "ZQSHIPTOF"
       type: "показатель"
-    - description: "Выручка за позицию в рублях без НДС."
+    - description: ["выручка", "Выручка за позицию в рублях без НДС."]
       technical_name: "ZAREVENF_RUB"
       type: "показатель"
-    - description: "Маржинальная прибыль от ССЦ за позицию в рублях."
+    - description: ["маржа", "Маржинальная прибыль от ССЦ за позицию в рублях."]
       technical_name: "ZAMARGPRF_RUB"
       type: "показатель"
-    - description: "Себестоимость в рублях."
+    - description: ["себестоимость", "Себестоимость в рублях."]
       technical_name: "KONV_KWERT_ZVUC_RUB"
       type: "показатель"

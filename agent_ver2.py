@@ -34,9 +34,7 @@ class GPTAgent:
             model=model,
             api_key=api_key,
             base_url=base_url,
-            temperature=0, #sys.float_info.min
-            seed=0,
-            top_p=0
+            temperature=0, 
         )
         self.memory = MemorySaver()
         self.agent = self._build_agent()
@@ -67,7 +65,7 @@ class GPTAgent:
 
     # Ноды
     def _generate_query(self, state: State):
-        response = self.llm.invoke([system_message_1] + state['long_term_memory_of_inc_req'] + state["messages"])
+        response = self.llm.invoke([system_message_1] + state['long_term_memory_of_inc_req'] + state["messages"], max_tokens=100)
         
         # Работа с долгосрочной памятью
         question = state["messages"][0]
