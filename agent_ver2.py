@@ -10,8 +10,11 @@ from langgraph.checkpoint.memory import MemorySaver
 from typing import Annotated, Literal
 from prompts import system_message_1, system_message_2, system_message_3, system_message_4
 from langchain_core.runnables import RunnableConfig
+from datetime import date, timedelta
 import logging
 #logging.basicConfig(level=logging.DEBUG)
+current_date = date.today().strftime("%Y%m%d")
+yesterday_date = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
 
 class State(TypedDict):
     messages: Annotated[list, add_messages]
@@ -104,8 +107,11 @@ class GPTAgent:
         request = state['question']
         filters = state['filters']
         message = HumanMessage(f'Описание запроса: {request}\nФильтры: {filters}')
+        system_message_3_copy = system_message_3
+        system_message_3_copy.content = system_message_3.content.replace('current_date', current_date)
+        system_message_3_copy.content = system_message_3.content.replace('yesterday_date', yesterday_date)
 
-        sql = self.llm.invoke([system_message_3, message]).content
+        sql = self.llm.invoke([system_message_3_copy, message]).content
         user = config.get("configurable").get("thread_id")
         sql_with_restriction, auth = apply_restrictions(sql, user)
         #sql_with_restriction = add_txt_fields(sql_with_restriction) # раскоментить, когда будут _TXT поля

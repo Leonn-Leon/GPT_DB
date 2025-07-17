@@ -1,10 +1,6 @@
 from pathlib import Path
 import yaml
 from langchain_core.messages import SystemMessage
-from datetime import date, timedelta
-
-current_date = date.today().strftime("%Y%m%d")
-yesterday_date = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
 
 path_to_struct = Path(__file__).parent / 'gpt_db' / 'data' / 'confs' / 'otgruzki_structure.yaml'
 with open(path_to_struct, 'r', encoding='utf-8') as file:
@@ -61,7 +57,7 @@ system_prompt_1 = """
 system_prompt_2 = """
 Ты — специалист в аналитике данных. Тебе будет дан запрос к таблице. Твоя задача - найти все условия для фильтрации в этом запросе (то, что мы можем добавить в SQL WHERE).
 Если условия найдены ответь строкой с этими условиями через запятую. 
-Условия должны быть привидены к нормальному виду (именительный падеж, единственное число). Если слово похоже на аббревиатуру - приведи в верхний регистр.
+Условия должны быть привидены к нормальному виду (именительный падеж, единственное число). Если слово похоже на аббревиатуру - приведи в верхний регистр, имена собственные пише с заглавных букв.
 Если условия не найдены ответь пустой строкой.
 Фильтры по датам мы не учитываем!
 
@@ -78,34 +74,39 @@ system_prompt_2 = """
 
 
 system_prompt_3 = """
-Ты — эксперт по SQL и анализу данных. Твоя задача — генерировать SQL-запросы для PostgreSQL, используя ТОЛЬКО условия фильтрации из указанного словаря "Фильтры". 
+Ты — эксперт по SQL и анализу данных. Твоя задача — генерировать SQL-запросы для PostgreSQL на основе описания запроса, используя ТОЛЬКО данные из словаря "Фильтры" для условий WHERE. 
 
-Важные правила:
-1. Все условия WHERE должны браться ИСКЛЮЧИТЕЛЬНО из словаря "Фильтры"
-2. Никогда не используй для фильтрации слова из "Описания запроса" (кроме случаев указания даты)
-3. Если в словаре "Фильтры" нет условий — не добавляй WHERE (кроме ограничения по дате)
-4. Текущая дата — {current_date}. Всегда ограничивай данные текущей датой, если нет других дат в запросе.
+Критические правила:
+1. Условия WHERE должны содержать ТОЛЬКО поля и значения из словаря "Фильтры"
+2. Запрещено использовать для фильтрации любые слова из "Описания запроса" (кроме явных указаний даты)
+3. Если в фильтрах нет данных — не добавляй WHERE (кроме ограничения по дате)
+4. Текущая дата — current_date. Всегда ограничивай данные текущей датой, если нет других дат в запросе.
 
 Структура запроса:
 1) Описание запроса: текст (игнорируй для фильтрации)
-2) Фильтры: словарь в формате "текст: (поле, значение, текст)" — используй ТОЛЬКО эти данные для WHERE
+2) Фильтры: {{'текст': ('поле таблицы', 'значение', 'описание')}} — используй только поле и значение
 
 Примеры:
 Запрос:
-    Описание: 'отгрузки вчера в СПК-Волгоград'
+    Описание запроса: 'отгрузки вчера в СПК-Волгоград'
     Фильтры: 'СПК-Волгоград': ('ZCFO1', '0701','СПК-Волгоград')
-SQL: SELECT COUNT(DISTINCT VBRK_VBELN) as VBRK_VBELN FROM columnar.azsdm_1612 WHERE VBRK_FKDAT = '{yesterday_date}' AND ZCFO1 = '0701'
+SQL: SELECT COUNT(DISTINCT VBRK_VBELN) as VBRK_VBELN FROM columnar.azsdm_1612 WHERE VBRK_FKDAT = yesterday_date AND ZCFO1 = '0701'
 
 Запрос:
-    Описание: 'выручка по листам'
+    Описание запроса: 'выручка по листам'
     Фильтры: 'лист': ('ZPRODH01', '910', 'Лист')
-SQL: SELECT SUM(NETWR) as NETWR FROM columnar.azsdm_1612 WHERE VBRK_FKDAT = '{current_date}' AND ZPRODH01 = '910'
+SQL: SELECT SUM(NETWR) as NETWR FROM columnar.azsdm_1612 WHERE VBRK_FKDAT = current_date AND ZPRODH01 = '910'
+
+Запрос:
+    Описание запроса: 'покажи общую выручку'
+    Фильтры: {{}}
+SQL: SELECT SUM(NETWR) as NETWR FROM columnar.azsdm_1612 WHERE VBRK_FKDAT = current_date
 
 Структура таблицы columnar.azsdm_1612:
 {struct_of_table}
 
 Отвечай ТОЛЬКО SQL-кодом без комментариев и кавычек. Если нет фильтров и дат — не добавляй WHERE.
-""".format(struct_of_table=struct_of_table, current_date=current_date, yesterday_date=yesterday_date)
+""".format(struct_of_table=struct_of_table)#, current_date=current_date, yesterday_date=yesterday_date)
 
 
 system_prompt_4 = """

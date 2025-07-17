@@ -29,7 +29,7 @@ for name in csv_files:
 		reader = csv.reader(file, delimiter=';')
 		next(reader) #skip head
 		if name in ('ZDIV', 'ZCFO1'):
-			result = [(row[0], row[1], serialize_float32(model.get_sentence_vector(row[1])), row[2], serialize_float32(model.get_sentence_vector(row[2]))) for row in reader]	
+			result = [(row[0], row[1], serialize_float32(model.get_sentence_vector(row[1])), row[2], serialize_float32(model.get_sentence_vector(row[2].replace("-", " ")))) for row in reader]	
 			cursor.execute(f'''
 			CREATE TABLE IF NOT EXISTS {name} (
 			KEY TEXT PRIMARY KEY,

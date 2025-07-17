@@ -59,5 +59,5 @@ def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str,
 
 
 if __name__ == "__main__":
-    print(search_of_near_vectors(['Арматура десятка А400', 'ПВД', 'спк-Казань']))
+    print(search_of_near_vectors(['спк Казань', 'спк-Казань', 'Нижний Новгород']))
 
