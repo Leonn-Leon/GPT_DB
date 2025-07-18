@@ -13,8 +13,6 @@ from langchain_core.runnables import RunnableConfig
 from datetime import date, timedelta
 import logging
 #logging.basicConfig(level=logging.DEBUG)
-current_date = date.today().strftime("%Y%m%d")
-yesterday_date = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
 
 class State(TypedDict):
     messages: Annotated[list, add_messages]
@@ -107,17 +105,23 @@ class GPTAgent:
         request = state['question']
         filters = state['filters']
         message = HumanMessage(f'Описание запроса: {request}\nФильтры: {filters}')
-        system_message_3_copy = system_message_3
-        system_message_3_copy.content = system_message_3.content.replace('current_date', current_date)
-        system_message_3_copy.content = system_message_3.content.replace('yesterday_date', yesterday_date)
+        system_message = self._generate_prompt_3_with_current_date()
 
-        sql = self.llm.invoke([system_message_3_copy, message]).content
+        sql = self.llm.invoke([system_message, message]).content
         user = config.get("configurable").get("thread_id")
         sql_with_restriction, auth = apply_restrictions(sql, user)
         #sql_with_restriction = add_txt_fields(sql_with_restriction) # раскоментить, когда будут _TXT поля
         
         message = AIMessage(f'SQL сгенерирован:\n{sql_with_restriction}')
         return {"messages": [message], "sql": sql_with_restriction, "auth": auth}
+    
+    def _generate_prompt_3_with_current_date(self):
+        current_date = date.today().strftime("%Y%m%d")
+        yesterday_date = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
+        system_message_3_copy = system_message_3
+        system_message_3_copy.content = system_message_3.content.replace('current_date', f"'{current_date}'")
+        system_message_3_copy.content = system_message_3.content.replace('yesterday_date', f"'{yesterday_date}'")
+        return system_message_3_copy
 
     def _generate_comment(self, state: State):
         request = state['question']
