@@ -10,7 +10,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from typing import Annotated, Literal
 from prompts import system_message_1, system_message_2, system_message_3, system_message_4
 from langchain_core.runnables import RunnableConfig
-from datetime import date, timedelta
+from datetime import datetime, timezone, timedelta
+import copy
 import logging
 #logging.basicConfig(level=logging.DEBUG)
 
@@ -108,6 +109,7 @@ class GPTAgent:
         system_message = self._generate_prompt_3_with_current_date()
 
         sql = self.llm.invoke([system_message, message]).content
+        
         user = config.get("configurable").get("thread_id")
         sql_with_restriction, auth = apply_restrictions(sql, user)
         #sql_with_restriction = add_txt_fields(sql_with_restriction) # раскоментить, когда будут _TXT поля
@@ -116,11 +118,13 @@ class GPTAgent:
         return {"messages": [message], "sql": sql_with_restriction, "auth": auth}
     
     def _generate_prompt_3_with_current_date(self):
-        current_date = date.today().strftime("%Y%m%d")
-        yesterday_date = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
-        system_message_3_copy = system_message_3
-        system_message_3_copy.content = system_message_3.content.replace('current_date', f"'{current_date}'")
-        system_message_3_copy.content = system_message_3.content.replace('yesterday_date', f"'{yesterday_date}'")
+        tz = timezone(timedelta(hours=5))
+        current_date = datetime.now(tz).strftime("%Y%m%d")
+        yesterday_date = (datetime.now(tz) - timedelta(days=1)).strftime("%Y%m%d")
+
+        system_message_3_copy = copy.deepcopy(system_message_3)
+        system_message_3_copy.content = system_message_3_copy.content.replace('current_date', f"'{current_date}'")
+        system_message_3_copy.content = system_message_3_copy.content.replace('yesterday_date', f"'{yesterday_date}'")
         return system_message_3_copy
 
     def _generate_comment(self, state: State):

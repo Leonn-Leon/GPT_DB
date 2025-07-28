@@ -10,7 +10,7 @@ url= os.getenv("RMQ_URL")
 exchange = os.getenv("RMQ_EXCHANGE_NAME")
 queue = os.getenv("RMQ_INPUT_QUEUE")
 routing_key = os.getenv("RMQ_ROUTING_KEY")
-extra_params = '/?connection_attempts=60&retry_delay=10'
+extra_params = '/?connection_attempts=8640&retry_delay=10' #пытается переподключиться каждые 10 сек в течении суток
 
 connection = pika.BlockingConnection(pika.URLParameters(url+extra_params))       
 channel = connection.channel()
