@@ -48,6 +48,9 @@
     - description: ["Статус клиента"]
       technical_name: "RLTYP"
       type: "характеристика"
+    - description: ["Категория клиента"]
+      technical_name: "CLASSIFIC"
+      type: "характеристика"
     - description: ["отгружено","Отгруженное количество позиции в тоннах."]
       technical_name: "ZQSHIPTOF"
       type: "показатель"

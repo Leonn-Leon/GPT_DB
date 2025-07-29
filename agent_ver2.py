@@ -24,6 +24,7 @@ class State(TypedDict):
     sql: str
     comment: str
     auth: str
+    first_message: bool
 
 class GPTAgent:
     def __init__(
@@ -67,17 +68,22 @@ class GPTAgent:
 
     # Ноды
     def _generate_query(self, state: State):
-        response = self.llm.invoke([system_message_1] + state['long_term_memory_of_inc_req'] + state["messages"], max_tokens=100)
+        if state['first_message']: #очень костыльно, потом надо переделать (когда поменяем тип памяти)
+            response = self.llm.invoke([system_message_1] + state["messages"], max_tokens=100)
+        else:
+            response = self.llm.invoke([system_message_1] + state['long_term_memory_of_inc_req'] + state["messages"], max_tokens=100)
         
         # Работа с долгосрочной памятью
         question = state["messages"][0]
         long_term_memory_of_inc_req = state['long_term_memory_of_inc_req']
         if len(long_term_memory_of_inc_req) >= 20:
-            to_long_term_memory_of_inc_req = [RemoveMessage(id=m.id) for m in long_term_memory_of_inc_req[:2]] + [question, response]            
+            to_long_term_memory_of_inc_req = [RemoveMessage(id=m.id) for m in long_term_memory_of_inc_req[:2]] + [question, response]
+        elif state['first_message']:
+            to_long_term_memory_of_inc_req = [RemoveMessage(id=REMOVE_ALL_MESSAGES)] + [question, response]
         else:
             to_long_term_memory_of_inc_req = [question, response]
-        #print(to_long_term_memory_of_inc_req)
-        return {"messages": [response], "long_term_memory_of_inc_req": to_long_term_memory_of_inc_req, 'question': question.content, 'answer': response.content}
+            
+        return {"messages": [response], "long_term_memory_of_inc_req": to_long_term_memory_of_inc_req, 'question': question.content, 'answer': response.content, 'first_message': False}
 
     def _should_continue(self, state: State) -> Literal["get_keys", "cleaning_of_state"]:
         last_message = state["messages"][-1].content
@@ -138,6 +144,7 @@ class GPTAgent:
         return {"messages": [message], "comment": comment}
     
     def _cleaning_of_state(self, state: State):
+        print('История сообщений пользователя: ', state['long_term_memory_of_inc_req'])
         self.previous_state = state #сохраняем state перед его очисткой и сбросом агента
         
         return {
@@ -150,12 +157,12 @@ class GPTAgent:
             "auth": ''
         }
 
-    def run(self, user_id: str, message: str):
+    def run(self, user_id: str, message: str, first_message=False):
         """Основной метод для обработки запроса"""
         user_question = HumanMessage(message)
 
         for step in self.agent.stream(
-            {"messages": [user_question]},
+            {"messages": [user_question], "first_message": first_message},
             {"configurable": {"thread_id": user_id}},
             stream_mode="values",
         ):
@@ -168,7 +175,27 @@ class GPTAgent:
 if __name__ == "__main__":
     agent = GPTAgent()
     while True:
-        message = input("Добро пожаловать в АРМ. Задайте ваш вопрос: ")
+        message = input("Добро пожаловать в АРМ 1. Задайте ваш вопрос: ")
+        if message.lower() in ["quit", "exit", "q", "выход"]:
+            print("До свидания!")
+            break
+        agent.run(user_id='user2', message=message, first_message=True)
+
+        message = input("Добро пожаловать в АРМ 2. Задайте ваш вопрос: ")
+        if message.lower() in ["quit", "exit", "q", "выход"]:
+            print("До свидания!")
+            break
+        agent.run(user_id='user2', message=message)
+
+
+        message = input("Добро пожаловать в АРМ 21. Задайте ваш вопрос: ")
+        if message.lower() in ["quit", "exit", "q", "выход"]:
+            print("До свидания!")
+            break
+        agent.run(user_id='user2', message=message, first_message=True)
+
+
+        message = input("Добро пожаловать в АРМ 22. Задайте ваш вопрос: ")
         if message.lower() in ["quit", "exit", "q", "выход"]:
             print("До свидания!")
             break

@@ -28,9 +28,10 @@ def callback(ch, method, props, body):
 
     user_id = request_data.get("user_id", "default_user")
     message = request_data.get("query_text", "привет")  
+    first_message = request_data.get("first_message", False)  
 
     try:
-        response_ai = agent.run(user_id=user_id, message=message)
+        response_ai = agent.run(user_id=user_id, message=message, first_message=first_message)
     except Exception as e:
         response_ai = {'answer': type(e).__name__}
     
