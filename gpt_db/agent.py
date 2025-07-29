@@ -68,13 +68,12 @@ class GPTAgent:
         self.memory = None
         self._sqlite_conn = None
 
-        # --- Загрузка конфигурации и данных ---
         self.db_schema, self.divisions = self._load_config_and_data()
 
-        # --- Инициализация LLM ---
         self.llm = self._initialize_llm()
+        
+        self._initialize_prompts()
 
-        # --- Настройка чекпоинтера (ЯВНАЯ ИНИЦИАЛИЗАЦИЯ) ---
         try:
             self._sqlite_conn = sqlite3.connect(self.checkpoint_db, check_same_thread=False)
             print(f"SQLite соединение к '{self.checkpoint_db}' создано (check_same_thread=False).")
@@ -88,7 +87,6 @@ class GPTAgent:
             self.close_connection()
             raise
 
-        # --- Сборка и компиляция графа ---
         try:
             self.graph = self._build_graph()
             self.compiled_agent = self.graph.compile(checkpointer=self.memory)
@@ -98,6 +96,33 @@ class GPTAgent:
              self.close_connection()
              raise
 
+    def _initialize_prompts(self):
+        """
+        Загружает все промпты из секции 'prompts' в config.yaml
+        и создает для каждого атрибут self.prompt_<имя_промпта>.
+        Этот метод вызывается один раз при инициализации агента.
+        """
+        print("Инициализация промптов из конфигурации...")
+        try:
+            prompts_config = self.config['prompts']
+                
+            if not isinstance(prompts_config, dict):
+                    raise TypeError("Секция 'prompts' в config.yaml должна быть словарем (dict).")
+
+            for key, value in prompts_config.items():
+                attribute_name = f"prompt_{key}"
+                setattr(self, attribute_name, value)
+                print(f"  - Промпт '{key}' успешно загружен в self.{attribute_name}")
+                
+            print("Все промпты успешно инициализированы.")
+
+        except KeyError:
+            print("\nКРИТИЧЕСКАЯ ОШИБКА: Секция 'prompts' не найдена в вашем config.yaml!")
+            raise
+        except Exception as e:
+            print(f"\nКРИТИЧЕСКАЯ ОШИБКА при инициализации промптов: {e}")
+            raise
+            
     def close_connection(self):
         if self._sqlite_conn:
             try:
@@ -176,16 +201,13 @@ class GPTAgent:
         """Узел, который выполняет основную валидацию запроса к БД."""
         print("--- Узел: validate_db_query ---")
         current_messages = state["messages"]
-        sys_prompt = self.config["validate_instruction"]
+        sys_prompt = self.prompt_validate_instruction
         convo = [SystemMessage(content=sys_prompt)] + current_messages
         result = self.llm.invoke(convo).content.strip()
 
         if result.startswith("OK:"):
             final_instruction = result.removeprefix("OK:").strip()
             print(f"Инструкция валидна: '{final_instruction}'")
-            # --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-            # Мы больше не добавляем сообщение в историю.
-            # Просто обновляем состояние нужными полями.
             return {
                 "final_instruction": final_instruction,
                 "needs_clarification": False
@@ -210,7 +232,7 @@ class GPTAgent:
             if isinstance(msg, HumanMessage) or (isinstance(msg, AIMessage) and "===" not in msg.content)
         ]
 
-        intent_checker_prompt = self.config["intent_detector"]
+        intent_checker_prompt = self.prompt_intent_detector
         try:
             # Передаем в LLM ОЧИЩЕННУЮ историю для анализа
             intent = self.llm.invoke([
@@ -235,7 +257,7 @@ class GPTAgent:
         Отладочный print остается.
         """
         print("\n--- Узел: get_keys ---")
-        sys_prompt = SystemMessage(content=self.config["filters_search"])
+        sys_prompt = SystemMessage(content=self.prompt_filters_search)
         validated_instruction = state.get('final_instruction')
         
         if not validated_instruction:
@@ -257,32 +279,44 @@ class GPTAgent:
 
     def generate_sql_query(self, state: MessagesState) -> Dict:
         """
-        ИЗМЕНЕНИЕ (п. 3): В этот узел перенесена логика применения ограничений.
-        1. Генерируется "сырой" SQL-запрос.
-        2. К нему применяется функция apply_restrictions.
-        3. В состояние сохраняется финальный SQL и флаг о том, были ли применены ограничения.
+        ИЗМЕНЕНИЕ: Генерирует SQL-запрос, динамически внедряя актуальную дату.
+        1. Получает актуальную дату.
+        2. Формирует промпт с этой датой.
+        3. Генерирует "сырой" SQL-запрос.
+        4. К нему применяется функция apply_restrictions.
+        5. В состояние сохраняется финальный SQL.
         """
-        print("\n--- Узел: generate_sql_query (с применением ограничений) ---")
+        print("\n--- Узел: generate_sql_query (с динамической датой и ограничениями) ---")
         validated_instruction = state.get('final_instruction')
         filters = state.get('filters')
         user_id = state.get('user_id')
-        
-        # Инициализация выходного состояния
-        output_state = {"messages": [], "restrictions_applied": False}
-
         if not validated_instruction:
-             print("Ошибка: Валидированная инструкция отсутствует.")
-             output_state["messages"] = [AIMessage(content="-- SQL generation skipped (no instruction) --")]
-             return output_state
+            print("Ошибка: Валидированная инструкция отсутствует. Генерация SQL пропущена.")
+            return {
+                "messages": [AIMessage(content="-- SQL generation skipped (no instruction) --")], 
+                "sql_query": "-- SQL generation skipped (no instruction) --",
+                "restrictions_applied": False
+            }
+
+        today = datetime.date.today()
+        
+        date_context_info = (
+            f"КОНТЕКСТНАЯ ИНФОРМАЦИЯ О ТЕКУЩЕЙ ДАТЕ:\n"
+            f"- Сегодняшняя дата (для current_date): {today.strftime('%Y-%m-%d')}\n"
+            f"- Вчерашняя дата (для current_date - 1): {(today - datetime.timedelta(days=1)).strftime('%Y%m%d')}\n"
+            f"Используй эту информацию для всех относительных запросов ('вчера', 'сегодня').\n"
+            f"----------------------------------\n\n"
+        )
 
         print(f"Инструкция для генерации SQL: {validated_instruction}")
-        sys_msg_content = self.config["generate_sql_query"].replace("<otgruzki_structure>", self.db_schema)
+
+        base_prompt = self.prompt_generate_sql_query.replace("<otgruzki_structure>", self.db_schema)
+        final_prompt_with_date = date_context_info + base_prompt
+        
         conversation = [
-            SystemMessage(sys_msg_content), 
+            SystemMessage(content=final_prompt_with_date), 
             HumanMessage(f"Описание запроса: {validated_instruction}\nФильтры: {filters}")
         ]
-
-        # --- Шаг 1: Генерация "сырого" SQL ---
         try:
             print("Вызов LLM для генерации SQL...")
             response = self.llm.invoke(conversation)
@@ -293,10 +327,12 @@ class GPTAgent:
             print(f"Сгенерирован сырой SQL: \n{sql_query}")
         except Exception as e:
             print(f"Ошибка при вызове LLM в generate_sql_query: {e}")
-            output_state["messages"] = [AIMessage(content=f"Произошла ошибка при генерации SQL: {e}")]
-            return output_state
+            return {
+                "messages": [AIMessage(content=f"Произошла ошибка при генерации SQL: {e}")],
+                "sql_query": f"-- Ошибка генерации SQL: {e} --",
+                "restrictions_applied": False
+            }
 
-        # --- Шаг 2: Применение ограничений (логика из удаленного узла) ---
         if not user_id:
             print("Критическая ошибка: user_id отсутствует. Ограничения не могут быть применены.")
             final_sql = sql_query
@@ -314,7 +350,6 @@ class GPTAgent:
                 final_sql = sql_query # В случае ошибки используем исходный запрос
                 restrictions_applied_flag = False
 
-        # --- Шаг 3: Обновление состояния ---
         return {
             "sql_query": final_sql,
             "restrictions_applied": restrictions_applied_flag
@@ -325,7 +360,7 @@ class GPTAgent:
         """Гибридный метод: LLM извлекает команду, Python вычисляет дату."""
         print("--- Гибридный узел: _get_date_from_instruction ---")
         
-        period_extractor_prompt = self.config["period_extractor"]
+        period_extractor_prompt = self.prompt_period_extractor
         
         try:
             # Шаг 1: LLM извлекает команду в JSON
@@ -383,16 +418,14 @@ class GPTAgent:
         
         if not sql_query or "error" in sql_query.lower() or "skipped" in sql_query.lower():
             print("SQL-запрос не найден или содержит ошибку. Формирую сообщение об ошибке.")
-            # Если SQL не удалось сгенерировать, возвращаем пользователю осмысленную ошибку
             return {"messages": [AIMessage(content=f"К сожалению, не удалось обработать ваш запрос. {sql_query}")]}
 
-        # ###! ВЫЗЫВАЕМ ПАРСЕР ДАТЫ
         human_readable_date = self._get_date_from_instruction(final_instruction)
         print(f"Получена человекочитаемая дата: '{human_readable_date}'")
 
         date_info_for_prompt = f"Конкретный период запроса: {human_readable_date}\n\n" if human_readable_date else ""
 
-        sys_msg_content = self.config["comment_sql_query"]
+        sys_msg_content = self.prompt_comment_sql_query
         human_msg_content = (
             f"Вопрос пользователя:\n{final_instruction}\n\n"
             f"{date_info_for_prompt}"  # <-- Используем новую переменную
@@ -410,7 +443,6 @@ class GPTAgent:
         return {"messages": [AIMessage(content=final_content)]}
     
 
-    # --- Сборка графа ---
     def _build_graph(self) -> StateGraph:
         """
         Собирает граф с маршрутизацией на основе намерения пользователя.
@@ -418,7 +450,6 @@ class GPTAgent:
         """
         workflow = StateGraph(MessagesState)
 
-        # --- ШАГ 1: Добавляем все узлы, КРОМЕ маршрутизатора ---
         workflow.add_node("handle_greeting", self.handle_greeting)
         workflow.add_node("handle_chitchat", self.handle_chitchat)
         workflow.add_node("validate_db_query", self.validate_db_query)
