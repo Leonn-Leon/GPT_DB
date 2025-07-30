@@ -32,12 +32,13 @@ from gpt_db.config import gpt_url
 class MessagesState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     final_instruction: Optional[str]
-    sql_query: Optional[str]  # <-- ДОБАВИЛ СТРОКУ
+    sql_query: Optional[str]
     user_id: Optional[str]
     report_id: Optional[str]
-    restrictions_applied: bool # Флаг, который теперь устанавливается в узле генерации
+    restrictions_applied: bool
     needs_clarification: bool
     filters: dict
+    relevance_decision: Optional[str]
 
 
 class GPTAgent:
@@ -133,7 +134,6 @@ class GPTAgent:
             except Exception as e:
                 print(f"Ошибка при закрытии соединения с БД чекпоинтера: {e}")
 
-    # --- Методы загрузки и инициализации (без изменений) ---
     def _load_config_and_data(self) -> tuple[str, str]:
         try:
             with open(self.config_file, "r", encoding="utf-8") as f:
@@ -182,21 +182,58 @@ class GPTAgent:
         )
         return {"messages": [AIMessage(content=greeting_response)]}
 
+    def handle_irrelevant_question(self, state: MessagesState) -> MessagesState:
+        """Узел, который обрабатывает нерелевантные вопросы."""
+        print("--- Узел: handle_irrelevant_question ---")
+        response_text = (
+            "Я — специализированный ассистент и могу отвечать на вопросы, "
+            "связанные только с базой данных отгрузок. "
+            "Например, вы можете спросить о выручке, объеме или клиентах."
+        )
+        return {"messages": [AIMessage(content=response_text)]}
+    
     def handle_chitchat(self, state: MessagesState) -> MessagesState:
-        """Узел, который обрабатывает простые вопросы и благодарности."""
+        """Узел, который обрабатывает простые благодарности."""
         print("--- Узел: handle_chitchat ---")
-        last_user_message = state["messages"][-1].content.lower()
-
-        if "число" in last_user_message or "дата" in last_user_message or "сегодня" in last_user_message:
-            today = date.today().strftime('%d %B %Y года')
-            response_text = f"Сегодня {today}."
-        elif "спасибо" in last_user_message or "благодарю" in last_user_message:
-            response_text = "Пожалуйста! Рад был помочь."
-        else:
-            response_text = "Я — специализированный SQL-ассистент. Моя главная задача — помогать с запросами к базе данных отгрузок."
+        
+        response_text = "Пожалуйста! Рад был помочь."
 
         return {"messages": [AIMessage(content=response_text)]}
 
+
+    def check_relevance(self, state: MessagesState) -> str:
+        """
+        Первый этап валидации: проверяет, относится ли вопрос к БД отгрузок.
+        Возвращает решение для условной маршрутизации.
+        """
+        print("\n--- Узел-валидатор: check_relevance ---")
+        last_user_message = state["messages"][-1]
+        
+        if not isinstance(last_user_message, HumanMessage):
+            return {"relevance_decision": "proceed"}
+        
+        sys_prompt = self.prompt_check_relevance_prompt # <-- Используем новый промпт
+        
+        try:
+            response = self.llm.invoke([
+                SystemMessage(content=sys_prompt),
+                last_user_message
+            ]).content.strip().upper()
+
+            print(f"Результат проверки на релевантность: {response}")
+
+            if response == "ДА":
+                decision = "proceed"  # Релевантно, продолжаем обработку
+            else:
+                decision = "irrelevant" # Нерелевантно, отправляем на стандартный ответ
+
+        except Exception as e:
+            print(f"Ошибка при проверке релевантности: {e}. Продолжаем по стандартному пути.")
+            decision = "proceed"
+        
+        return {"relevance_decision": decision}
+        
+        
     def validate_db_query(self, state: MessagesState) -> MessagesState:
         """Узел, который выполняет основную валидацию запроса к БД."""
         print("--- Узел: validate_db_query ---")
@@ -234,7 +271,6 @@ class GPTAgent:
 
         intent_checker_prompt = self.prompt_intent_detector
         try:
-            # Передаем в LLM ОЧИЩЕННУЮ историю для анализа
             intent = self.llm.invoke([
                 SystemMessage(content=intent_checker_prompt),
             ] + human_like_history).content.strip().upper()  # <-- используем human_like_history
@@ -418,6 +454,7 @@ class GPTAgent:
         
         if not sql_query or "error" in sql_query.lower() or "skipped" in sql_query.lower():
             print("SQL-запрос не найден или содержит ошибку. Формирую сообщение об ошибке.")
+            # Если SQL не удалось сгенерировать, возвращаем пользователю осмысленную ошибку
             return {"messages": [AIMessage(content=f"К сожалению, не удалось обработать ваш запрос. {sql_query}")]}
 
         human_readable_date = self._get_date_from_instruction(final_instruction)
@@ -446,28 +483,27 @@ class GPTAgent:
     def _build_graph(self) -> StateGraph:
         """
         Собирает граф с маршрутизацией на основе намерения пользователя.
-        ИСПРАВЛЕННАЯ ВЕРСИЯ.
         """
         workflow = StateGraph(MessagesState)
 
+        # --- ШАГ 1: Добавляем все узлы, КРОМЕ маршрутизатора ---
         workflow.add_node("handle_greeting", self.handle_greeting)
         workflow.add_node("handle_chitchat", self.handle_chitchat)
+        workflow.add_node("check_relevance", self.check_relevance) 
+        workflow.add_node("handle_irrelevant_question", self.handle_irrelevant_question)
         workflow.add_node("validate_db_query", self.validate_db_query)
         workflow.add_node("get_keys", self.get_keys)
         workflow.add_node("generate_sql_query", self.generate_sql_query)
         workflow.add_node("comment_sql_query", self.comment_sql_query)
         
         # --- ШАГ 2: Устанавливаем точку входа ---
-        # Точкой входа теперь является УСЛОВИЕ, а не узел.
-        # Мы передаем ему нашу функцию-маршрутизатор.
+        # Точка входа по-прежнему определяет базовое намерение
         workflow.set_conditional_entry_point(
-            self.route_request, # <-- Наша функция, которая вернет строку
+            self.route_request,
             {
-                # Ключи - это строки, которые может вернуть route_request
-                # Значения - это названия узлов, на которые нужно перейти
                 "greeting": "handle_greeting",
                 "chitchat": "handle_chitchat",
-                "database_question": "validate_db_query"
+                "database_question": "check_relevance" 
             }
         )
         
@@ -476,7 +512,21 @@ class GPTAgent:
         # Ветки "болтовни" сразу заканчиваются
         workflow.add_edge("handle_greeting", END)
         workflow.add_edge("handle_chitchat", END)
+        workflow.add_edge("handle_irrelevant_question", END) # Новая конечная ветка
 
+        def route_after_relevance(state: MessagesState) -> str:
+            """Читает решение из состояния и возвращает название следующего узла."""
+            return state.get("relevance_decision", "proceed")
+
+        workflow.add_conditional_edges(
+            "check_relevance",          # Начинаем с этого узла
+            route_after_relevance,      # Используем эту функцию для принятия решения
+            {
+                "proceed": "validate_db_query",
+                "irrelevant": "handle_irrelevant_question"
+            }
+        )
+        
         # Ветка валидации имеет свое собственное ветвление
         def route_after_validation(state: MessagesState):
             return "clarify" if state.get("needs_clarification") else "proceed"
@@ -497,7 +547,7 @@ class GPTAgent:
         
         return workflow
 
-    # --- Функция для запуска диалога (без изменений) ---
+    # --- Функция для запуска диалога ---
     def run(self, user_id: str, message: str, report_id: Optional[str] = "default_report") -> Optional[Dict]:
         thread_id = f"user_{user_id}_{report_id}"
         config = {"configurable": {"thread_id": thread_id}}
