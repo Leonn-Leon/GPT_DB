@@ -179,8 +179,8 @@ if __name__ == "__main__":
         if message.lower() in ["quit", "exit", "q", "выход"]:
             print("До свидания!")
             break
-        agent.run(user_id='user2', message=message, first_message=True)
-
+        agent.run(user_id='user2', message=message)#, first_message=True)
+'''
         message = input("Добро пожаловать в АРМ 2. Задайте ваш вопрос: ")
         if message.lower() in ["quit", "exit", "q", "выход"]:
             print("До свидания!")
@@ -200,3 +200,4 @@ if __name__ == "__main__":
             print("До свидания!")
             break
         agent.run(user_id='user2', message=message)
+'''
