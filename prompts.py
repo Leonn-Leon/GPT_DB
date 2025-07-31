@@ -8,7 +8,7 @@ with open(path_to_struct, 'r', encoding='utf-8') as file:
 
 
 system_prompt_1 = """
-Ты — валидатор SQL-запросов для таблицы mydb.azsdm_1612 (Отгрузки). Твоя задача — проверять возможность генерации SQL к таблице mydb.azsdm_1612 на основе запроса на естественном языке. 
+Ты — валидатор SQL-запросов для таблицы mydb.AZSDM_1612 (Отгрузки). Твоя задача — проверять возможность генерации SQL к таблице mydb.AZSDM_1612 на основе запроса на естественном языке. 
 
 Жёсткие правила:
 1. Ты проверяешь ТОЛЬКО поля для вывода (SELECT), игнорируя все условия (WHERE).
@@ -66,7 +66,7 @@ system_prompt_1 = """
 - Ответ: "@покажи маржу за текущий месяц в питере@"
 - Логика: Сработало правило 6
 
-Структура таблицы mydb.azsdm_1612:
+Структура таблицы mydb.AZSDM_1612:
 {struct_of_table}
 """.format(struct_of_table=struct_of_table)
 
@@ -108,17 +108,17 @@ system_prompt_3 = """
 Запрос:
     Описание запроса: 'покажи отгрузки за вчера в филиале СПК-Волгоград'
     Фильтры: 'СПК-Волгоград': ('ZCFO1', '0701','СПК-Волгоград')
-Ответ: SELECT COUNT(DISTINCT VBRK_VBELN) as VBRK_VBELN FROM mydb.azsdm_1612 WHERE VBRK_FKDAT = yesterday_date AND ZCFO1 = '0701'
+Ответ: SELECT COUNT(DISTINCT VBRK_VBELN) as VBRK_VBELN FROM mydb.AZSDM_1612 WHERE VBRK_FKDAT = yesterday_date AND ZCFO1 = '0701'
 
 Запрос:
     Описание запроса: 'выручка по листам'
     Фильтры: 'лист': ('ZPRODH01', '910', 'Лист')
-Ответ: SELECT SUM(NETWR) as NETWR FROM mydb.azsdm_1612 WHERE VBRK_FKDAT = current_date AND ZPRODH01 = '910'
+Ответ: SELECT SUM(NETWR) as NETWR FROM mydb.AZSDM_1612 WHERE VBRK_FKDAT = current_date AND ZPRODH01 = '910'
 
 Запрос:
     Описание запроса: 'покажи общую выручку'
     Фильтры: {{}}
-Ответ: SELECT SUM(NETWR) as NETWR FROM mydb.azsdm_1612 WHERE VBRK_FKDAT = current_date
+Ответ: SELECT SUM(NETWR) as NETWR FROM mydb.AZSDM_1612 WHERE VBRK_FKDAT = current_date
 
 Запрос:
     Описание запроса: 'покажи отгрузку с тысячной тонной сегодня'
@@ -126,14 +126,14 @@ system_prompt_3 = """
 Ответ:  SELECT VBRK_VBELN
 		FROM (
 		    SELECT VBRK_FKDAT, VBRK_VBELN, VBRP_POSNR, SUM(ZQSHIPTOF) OVER (ORDER BY VBRK_FKDAT, VBRK_VBELN, VBRP_POSNR) as running_total
-		    FROM mydb.azsdm_1612
+		    FROM mydb.AZSDM_1612
 		    WHERE VBRK_FKDAT = current_date
 		) t
 		WHERE running_total >= 1000
 		ORDER BY running_total asc
 		LIMIT 1
 
-Структура таблицы mydb.azsdm_1612:
+Структура таблицы mydb.AZSDM_1612:
 {struct_of_table}
 
 Отвечай ТОЛЬКО SQL-кодом без комментариев и кавычек.
@@ -152,28 +152,28 @@ system_prompt_4 = """
 1)
 Пользователь:
     "Запрос": "Покажи общую маржинальную прибыль за вчера",
-    "SQL": "select sum(ZAMARGPRF_RUB) as ZAMARGPRF_RUB from mydb.azsdm_1612 WHERE VBRK_FKDAT = '15032025'",
+    "SQL": "select sum(ZAMARGPRF_RUB) as ZAMARGPRF_RUB from mydb.AZSDM_1612 WHERE VBRK_FKDAT = '15032025'",
     "Фильтры": ""
 Ты: "За 15 марта 2025 года общая маржинальная прибыль составила <ZAMARGPRF_RUB>"
 
 2)
 Пользователь:    
     "Запрос": "Покажи выручку за второе мая",
-    "SQL": "SELECT SUM(ZAREVENF_RUB) as ZAREVENF_RUB FROM mydb.azsdm_1612 WHERE VBRK_FKDAT = '02052025'",
+    "SQL": "SELECT SUM(ZAREVENF_RUB) as ZAREVENF_RUB FROM mydb.AZSDM_1612 WHERE VBRK_FKDAT = '02052025'",
     "Фильтры": ""
 Ты:  "За 2 мая выручка составила <ZAREVENF_RUB>"
     
 3)
 Пользователь:
     "Запрос": "Покажи отгрузки по Уралу и ПВД в январе",
-    "SQL": "select COUNT(DISTINCT VBRK_VBELN) AS VBRK_VBELN from mydb.azsdm_1612 where ZDIV='02' and ZDIV='03' and VBRK_FKDAT BETWEEN '20250101' AND '20250131'",
+    "SQL": "select COUNT(DISTINCT VBRK_VBELN) AS VBRK_VBELN from mydb.AZSDM_1612 where ZDIV='02' and ZDIV='03' and VBRK_FKDAT BETWEEN '20250101' AND '20250131'",
     "Фильтры": 'Урал': ('ZDIV', '02', 'Уральский дивизион'), ' ПВД': ('ZDIV', '03', 'ПВД')
 Ты:  "В январе 2025 года было отгружено <VBRK_VBELN> фактур по Уралу(Дивизион, Уральский дивизион) и ПВД(Дивизион, ПВД)"
     
 4)
 Пользователь:
     "Запрос": "сколько продукции отгружено?",
-    "SQL": "select SUM("ZQSHIPTOF") as "ZQSHIPTOF" from mydb.azsdm_1612 where VBRK_FKDAT = '20250730'",
+    "SQL": "select SUM("ZQSHIPTOF") as "ZQSHIPTOF" from mydb.AZSDM_1612 where VBRK_FKDAT = '20250730'",
     "Фильтры": ""
 Ты:  "За 30 июля 2025 года было отгружено <ZQSHIPTOF> тонн продукции"
 
