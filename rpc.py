@@ -23,7 +23,7 @@ def callback(ch, method, props, body):
         body_decode = body.decode('utf-8')
         request_data = json.loads(body_decode)
     except Exception as e:
-        print('Ошибка! ', type(e).__name__)
+        print('Ошибка при парсинге входящего сообщения: ', str(e))
         request_data = {}
 
     user_id = request_data.get("user_id", "default_user")
@@ -33,7 +33,7 @@ def callback(ch, method, props, body):
     try:
         response_ai = agent.run(user_id=user_id, message=message, first_message=first_message)
     except Exception as e:
-        response_ai = {'answer': type(e).__name__}
+        response_ai = {'answer': str(e)}
     
     type = 'CLARIFICATION_QUESTION' if response_ai.get("sql", '') == '' else 'FINAL_ANSWER'
     response = {
