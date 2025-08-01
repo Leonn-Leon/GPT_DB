@@ -67,5 +67,14 @@ def callback(ch, method, props, body):
 channel.basic_qos(prefetch_count=1)
 channel.basic_consume(queue=queue, on_message_callback=callback)
 
-print(" [x] Awaiting RPC requests")
+print(f" [x] Awaiting RPC requests. \nParams: \nurl: {url} \nexchange: {exchange} \nqueue: {queue} \nrouting_key: {routing_key} \nurl: {url} \nparams: {extra_params}")
 channel.start_consuming()
+
+
+
+
+url= os.getenv("RMQ_URL")
+exchange = os.getenv("RMQ_EXCHANGE_NAME")
+queue = os.getenv("RMQ_INPUT_QUEUE")
+routing_key = os.getenv("RMQ_ROUTING_KEY")
+extra_params = '/?connection_attempts=8640&retry_delay=10'

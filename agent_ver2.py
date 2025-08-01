@@ -139,7 +139,7 @@ class GPTAgent:
         filters = state['filters']
         message = HumanMessage(f'Запрос: {request}\nSQL: {sql}\nФильтры: {filters}')
 
-        comment = self.llm.invoke([system_message_4, message]).content
+        comment = self.llm.invoke([system_message_4, message]).content.replace('\n', ' ')
         message = AIMessage(f'Комментарий сгенерирован: {comment}')
         return {"messages": [message], "comment": comment}
     
@@ -179,7 +179,9 @@ if __name__ == "__main__":
         if message.lower() in ["quit", "exit", "q", "выход"]:
             print("До свидания!")
             break
-        agent.run(user_id='user2', message=message)#, first_message=True)
+        #agent.run(user_id='user2', message=message)#, first_message=True)
+        agent.run(user_id='user2', message='привет')#, first_message=True)
+        agent.run(user_id='user2', message='привет йо')#, first_message=True)
 '''
         message = input("Добро пожаловать в АРМ 2. Задайте ваш вопрос: ")
         if message.lower() in ["quit", "exit", "q", "выход"]:
