@@ -9,8 +9,7 @@ variables:
 docker-build:
   only:
       refs:
-        - dev
-        - master
+        - stage
   stage: build
   image: docker:latest
   variables:
