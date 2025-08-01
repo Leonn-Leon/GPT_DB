@@ -98,7 +98,7 @@ class GPTAgent:
         request = last_message.split('@')[1]
         request_human = HumanMessage(request)
 
-        filters = self.llm.invoke([system_message_2, request_human]).content
+        filters = self.llm.invoke([system_message_2, request_human]).content.replace("'", "").replace('"', '')
         if filters:
             filters_and_keys = search_of_near_vectors(filters.split(','))
             message = AIMessage(f'Найдены ключи для фильтров: {filters_and_keys}')
