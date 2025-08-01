@@ -3,3 +3,4 @@ cc.ru.300.bin
 *.gz
 .venv/
 __pycache__/
+.gitlab-ci.yml

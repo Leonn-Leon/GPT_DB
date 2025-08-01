@@ -37,7 +37,7 @@ def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str,
                     SELECT                    
                         vec_distance_cosine(VECTOR_{i}, ?) as DISTANCE,    
                         KEY,
-                        TXT_{i}
+                        TXT_1
                     FROM {name_of_table}
                     WHERE TXT_{i} != ''
                     ORDER BY DISTANCE
@@ -59,5 +59,5 @@ def search_of_near_vectors(strings: list[str]) -> dict[str, list[tuple[str, str,
 
 
 if __name__ == "__main__":
-    print(search_of_near_vectors(['спк Казань', 'спк-Казань', 'Нижний Новгород']))
+    print(search_of_near_vectors(['спк Казань', 'Уральский дивизион', 'Урал']))
 
