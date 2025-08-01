@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import datetime
 import yaml
@@ -6,6 +7,7 @@ import sqlite3
 import traceback
 from typing import List, Annotated, Union, Dict, Optional
 from typing_extensions import TypedDict
+from pydantic import BaseModel, Field
 
 # --- Langchain & Langgraph Imports ---
 from langgraph.graph import StateGraph, START, END
@@ -28,6 +30,7 @@ from gpt_db.restriction_for_sql import apply_restrictions
 from gpt_db.search_of_near_vectors import search_of_near_vectors
 from gpt_db.config import gpt_url
 
+
 # --- Определение состояния графа ---
 class MessagesState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -38,8 +41,29 @@ class MessagesState(TypedDict):
     restrictions_applied: bool
     needs_clarification: bool
     filters: dict
-    relevance_decision: Optional[str]
+    select_fields: Optional[List[Dict]]
 
+class SelectField(BaseModel):
+    """Структура для одного поля в SELECT."""
+    technical_name: str = Field(description="Техническое имя поля из структуры.")
+    aggregation: str = Field(description="Функция агрегации: SUM, COUNT_DISTINCT или NONE.")
+
+class Period(BaseModel):
+    """Структура для описания периода."""
+    type: str = Field(description="Тип периода: 'relative_day', 'specific_date_range' или 'none'.")
+    value: Optional[int] = Field(default=None, description="Значение для relative_day (например, -1 для вчера).")
+    start_date: Optional[str] = Field(default=None, description="Дата начала в формате YYYY-MM-DD.")
+    end_date: Optional[str] = Field(default=None, description="Дата конца в формате YYYY-MM-DD.")
+    
+class ExtractionResult(BaseModel):
+    """
+    Структура для результата работы узла-экстрактора.
+    LLM должна заполнить эту модель.
+    """
+    final_instruction: Optional[str] = Field(description="Полная итоговая инструкция, если статус PROCEED.")
+    select_fields: Optional[List[SelectField]] = Field(description="Список полей для SELECT, если статус PROCEED.")
+    filter_terms: Optional[List[str]] = Field(description="Список терминов для WHERE, если статус PROCEED.")
+    period: Optional[Period] = Field(default=None, description="Структурированное представление периода.")
 
 class GPTAgent:
     """
@@ -58,7 +82,6 @@ class GPTAgent:
         
         load_dotenv()
 
-        # --- Присваивание атрибутов ---
         self.config_file = config_file
         self.structure_file = structure_file
         self.divisions_file = divisions_file
@@ -199,68 +222,11 @@ class GPTAgent:
         response_text = "Пожалуйста! Рад был помочь."
 
         return {"messages": [AIMessage(content=response_text)]}
-
-
-    def check_relevance(self, state: MessagesState) -> str:
-        """
-        Первый этап валидации: проверяет, относится ли вопрос к БД отгрузок.
-        Возвращает решение для условной маршрутизации.
-        """
-        print("\n--- Узел-валидатор: check_relevance ---")
-        last_user_message = state["messages"][-1]
         
-        if not isinstance(last_user_message, HumanMessage):
-            return {"relevance_decision": "proceed"}
-        
-        sys_prompt = self.prompt_check_relevance_prompt # <-- Используем новый промпт
-        
-        try:
-            response = self.llm.invoke([
-                SystemMessage(content=sys_prompt),
-                last_user_message
-            ]).content.strip().upper()
 
-            print(f"Результат проверки на релевантность: {response}")
-
-            if response == "ДА":
-                decision = "proceed"  # Релевантно, продолжаем обработку
-            else:
-                decision = "irrelevant" # Нерелевантно, отправляем на стандартный ответ
-
-        except Exception as e:
-            print(f"Ошибка при проверке релевантности: {e}. Продолжаем по стандартному пути.")
-            decision = "proceed"
-        
-        return {"relevance_decision": decision}
-        
-        
-    def validate_db_query(self, state: MessagesState) -> MessagesState:
-        """Узел, который выполняет основную валидацию запроса к БД."""
-        print("--- Узел: validate_db_query ---")
-        current_messages = state["messages"]
-        sys_prompt = self.prompt_validate_instruction
-        convo = [SystemMessage(content=sys_prompt)] + current_messages
-        result = self.llm.invoke(convo).content.strip()
-
-        if result.startswith("OK:"):
-            final_instruction = result.removeprefix("OK:").strip()
-            print(f"Инструкция валидна: '{final_instruction}'")
-            return {
-                "final_instruction": final_instruction,
-                "needs_clarification": False
-            }
-        else:
-            print(f"Инструкция требует уточнений: {result}")
-            # А вот уточняющий вопрос мы, наоборот, ДОЛЖНЫ добавить в историю.
-            return {
-                "messages": [AIMessage(content=result)],
-                "final_instruction": None,
-                "needs_clarification": True
-            }
-
-    def route_request(self, state: MessagesState) -> str:
+    def detect_intent(self, state: MessagesState) -> str:
         """Главный маршрутизатор, определяет намерение и возвращает название следующего узла."""
-        print("\n--- Узел-маршрутизатор: route_request ---")
+        print("\n--- Узел-маршрутизатор: detect_intent ---")
         
         history = state["messages"]
 
@@ -269,89 +235,139 @@ class GPTAgent:
             if isinstance(msg, HumanMessage) or (isinstance(msg, AIMessage) and "===" not in msg.content)
         ]
 
-        intent_checker_prompt = self.prompt_intent_detector
+        intent_checker_prompt = self.prompt_initial_classifier_prompt
         try:
+
             intent = self.llm.invoke([
                 SystemMessage(content=intent_checker_prompt),
-            ] + human_like_history).content.strip().upper()  # <-- используем human_like_history
-
+            ] + human_like_history).content.strip().upper()
             print(f"Определено намерение пользователя: {intent}")
 
-            if intent in ["GREETING", "DATABASE_QUESTION", "CHITCHAT"]:
+
+            if intent in ["GREETING", "DATABASE_QUESTION", "CHITCHAT", "IRRELEVANT_QUESTION"]:
                 return intent.lower()
+            else:
+                print(f"Предупреждение: получен неожиданный вердикт '{intent}'. Используется путь по умолчанию.")
+                return "database_question"
+
         except Exception as e:
             print(f"Ошибка при определении намерения: {e}. Продолжаем по стандартному пути.")
 
-        return "database_question"
+            return "database_question"
 
-        
-    
-    def get_keys(self, state: MessagesState):
+    def extract_data(self, state: MessagesState) -> Dict:
         """
-        ИЗМЕНЕНИЕ: Этот узел теперь не добавляет сообщение в историю.
-        Он молча выполняет свою работу и обновляет 'filters' в состоянии.
-        Отладочный print остается.
+        Единый узел для извлечения данных. LLM извлекает, Python принимает решение.
         """
-        print("\n--- Узел: get_keys ---")
-        sys_prompt = SystemMessage(content=self.prompt_filters_search)
-        validated_instruction = state.get('final_instruction')
-        
-        if not validated_instruction:
-            print("Фильтры не найдены (нет инструкции).")
-            return {"filters": {}} # Просто возвращаем пустые фильтры
+        print("\n--- Узел: extract_data (алгоритмическое решение) ---")
 
-        validated_instruction_human = HumanMessage(validated_instruction)
+        prompt_template = self.prompt_data_extractor_prompt
+        with open(self.structure_file, 'r', encoding='utf-8') as file:
+            structure_data = yaml.safe_load(file)
         
-        filters_str = self.llm.invoke([sys_prompt, validated_instruction_human]).content
-        if filters_str and not filters_str.isspace():
-            filters_and_keys = search_of_near_vectors(filters_str.split(','))
+        prompt = prompt_template.format(
+            fields_structure=yaml.dump(structure_data, allow_unicode=True)
+        )
+        structured_llm = self.llm.with_structured_output(ExtractionResult)
+
+        print("Вызов LLM для извлечения данных...")
+        try:
+            current_messages = state["messages"]
+            convo = [SystemMessage(content=prompt)] + current_messages
+            extraction_result: ExtractionResult = structured_llm.invoke(convo)
+        except Exception as e:
+            print(f"Критическая ошибка при вызове structured_llm: {e}")
+            return {"messages": [AIMessage(content=f"Ошибка анализа запроса: {e}")]}
+
+        select_fields = extraction_result.select_fields
+        period = extraction_result.period
+
+        if not select_fields:
+            print("РЕШЕНИЕ: Не найдены поля для SELECT. Требуется уточнение.")
+            return {
+                "messages": [AIMessage(content="Уточните, какие именно данные вас интересуют? Например: выручка, объем, количество.")],
+                "needs_clarification": True
+            }
+
+        if not period or period.type == "none":
+            print("РЕШЕНИЕ: Не найден период. Требуется уточнение.")
+            return {
+                "messages": [AIMessage(content="За какой период вы хотите увидеть данные? Например: за сегодня, за вчера, за текущий месяц.")],
+                "needs_clarification": True
+            }
+
+        print("РЕШЕНИЕ: Все данные найдены. Продолжаем.")
+
+        raw_filter_terms = extraction_result.filter_terms or []
+        print(f"LLM извлекла сырые фильтры: {raw_filter_terms}")
+
+        date_keywords = {
+            "сегодня", "вчера", "позавчера", "завтра",
+            "неделя", "неделю", "месяц", "месяца", "год", "года", "году",
+            "январь", "февраль", "март", "апрель", "май", "июнь",
+            "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"
+        }
+        date_numbers = {str(d) for d in range(1, 32)}
+        DATE_RELATED_WORDS = date_keywords.union(date_numbers)
+
+        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+        def is_date_related(term):
+            """Проверяет, является ли слово датой или похожим на дату."""
+            if term.lower() in DATE_RELATED_WORDS:
+                return True
+            if date_pattern.match(term):
+                return True
+            return False
+
+        cleaned_filter_terms = [
+            term for term in raw_filter_terms if not is_date_related(term)
+        ]
+        print(f"Фильтры после программной очистки: {cleaned_filter_terms}")
+
+        if cleaned_filter_terms:
+            filters_and_keys = search_of_near_vectors(cleaned_filter_terms)
             print(f'Найдены ключи для фильтров: {filters_and_keys}')
         else:
             filters_and_keys = {}
             print('Фильтры не найдены')
+            
+        select_fields_dict = [field.model_dump() for field in extraction_result.select_fields]
 
-        # Возвращаем ТОЛЬКО обновленное состояние, без "messages"
-        return {"filters": filters_and_keys}
-
-    def generate_sql_query(self, state: MessagesState) -> Dict:
-        """
-        ИЗМЕНЕНИЕ: Генерирует SQL-запрос, динамически внедряя актуальную дату.
-        1. Получает актуальную дату.
-        2. Формирует промпт с этой датой.
-        3. Генерирует "сырой" SQL-запрос.
-        4. К нему применяется функция apply_restrictions.
-        5. В состояние сохраняется финальный SQL.
-        """
-        print("\n--- Узел: generate_sql_query (с динамической датой и ограничениями) ---")
-        validated_instruction = state.get('final_instruction')
+        return {
+            "needs_clarification": False,
+            "final_instruction": extraction_result.final_instruction,
+            "select_fields": select_fields_dict,
+            "filters": filters_and_keys,
+            "period": extraction_result.period
+        }
+         
+    def build_sql_query(self, state: MessagesState) -> Dict:
+        print("\n--- Узел: build_sql_query (сборщик) ---")
+        
+        select_fields = state.get('select_fields')
         filters = state.get('filters')
         user_id = state.get('user_id')
-        if not validated_instruction:
-            print("Ошибка: Валидированная инструкция отсутствует. Генерация SQL пропущена.")
+        period = state.get('period')
+
+        if not select_fields:
+            print("Ошибка: Поля для SELECT отсутствуют. Генерация SQL пропущена.")
             return {
-                "messages": [AIMessage(content="-- SQL generation skipped (no instruction) --")], 
-                "sql_query": "-- SQL generation skipped (no instruction) --",
+                "sql_query": "-- SQL generation skipped (no select fields) --",
                 "restrictions_applied": False
             }
 
-        today = datetime.date.today()
-        
-        date_context_info = (
-            f"КОНТЕКСТНАЯ ИНФОРМАЦИЯ О ТЕКУЩЕЙ ДАТЕ:\n"
-            f"- Сегодняшняя дата (для current_date): {today.strftime('%Y-%m-%d')}\n"
-            f"- Вчерашняя дата (для current_date - 1): {(today - datetime.timedelta(days=1)).strftime('%Y%m%d')}\n"
-            f"Используй эту информацию для всех относительных запросов ('вчера', 'сегодня').\n"
-            f"----------------------------------\n\n"
-        )
-
-        print(f"Инструкция для генерации SQL: {validated_instruction}")
-
-        base_prompt = self.prompt_generate_sql_query.replace("<otgruzki_structure>", self.db_schema)
-        final_prompt_with_date = date_context_info + base_prompt
+        base_prompt = self.prompt_build_sql_query_prompt.replace("<otgruzki_structure>", self.db_schema)
         
         conversation = [
-            SystemMessage(content=final_prompt_with_date), 
-            HumanMessage(f"Описание запроса: {validated_instruction}\nФильтры: {filters}")
+            SystemMessage(content=base_prompt),
+            HumanMessage(
+                f"Собери SQL-запрос на основе следующих компонентов:\n"
+                f"ИНСТРУКЦИЯ: {state.get('final_instruction')}\n"
+                f"ПОЛЯ ДЛЯ SELECT (в формате JSON): {json.dumps(select_fields, ensure_ascii=False)}\n"
+                f"ФИЛЬТРЫ ДЛЯ WHERE: {filters}\n"
+                f"ПЕРИОД (в формате JSON): {json.dumps(period, ensure_ascii=False)}"
+            )
         ]
         try:
             print("Вызов LLM для генерации SQL...")
@@ -362,7 +378,7 @@ class GPTAgent:
             sql_query = sql_query.strip()
             print(f"Сгенерирован сырой SQL: \n{sql_query}")
         except Exception as e:
-            print(f"Ошибка при вызове LLM в generate_sql_query: {e}")
+            print(f"Ошибка при вызове LLM в build_sql_query: {e}")
             return {
                 "messages": [AIMessage(content=f"Произошла ошибка при генерации SQL: {e}")],
                 "sql_query": f"-- Ошибка генерации SQL: {e} --",
@@ -383,7 +399,7 @@ class GPTAgent:
                     print("Ограничения не были применены (не требуется или ошибка в apply_restrictions).")
             except Exception as e:
                 print(f"Ошибка при применении ограничений: {e}")
-                final_sql = sql_query # В случае ошибки используем исходный запрос
+                final_sql = sql_query 
                 restrictions_applied_flag = False
 
         return {
@@ -392,11 +408,11 @@ class GPTAgent:
         }
 
 
-    def _get_date_from_instruction(self, instruction: str) -> str:
+    def _extract_period(self, instruction: str) -> str:
         """Гибридный метод: LLM извлекает команду, Python вычисляет дату."""
-        print("--- Гибридный узел: _get_date_from_instruction ---")
-        
-        period_extractor_prompt = self.prompt_period_extractor
+        print("--- Гибридный узел: _extract_period ---")
+
+        period_extractor_prompt = self.prompt_extract_period_prompt
         
         try:
             # Шаг 1: LLM извлекает команду в JSON
@@ -444,9 +460,9 @@ class GPTAgent:
             return "" # Возвращаем пустую строку в случае любой ошибки
     
     
-    def comment_sql_query(self, state: MessagesState) -> Dict[str, List[BaseMessage]]:
+    def generate_final_response(self, state: MessagesState) -> Dict[str, List[BaseMessage]]:
         """Генерирует комментарий к SQL-запросу, используя точную дату."""
-        print(f"\n--- Узел: comment_sql_query (с определением даты) ---")
+        print(f"\n--- Узел: generate_final_response (с определением даты) ---")
         
         sql_query = state.get('sql_query')
         final_instruction = state.get('final_instruction', "[Инструкция не найдена]")
@@ -457,12 +473,12 @@ class GPTAgent:
             # Если SQL не удалось сгенерировать, возвращаем пользователю осмысленную ошибку
             return {"messages": [AIMessage(content=f"К сожалению, не удалось обработать ваш запрос. {sql_query}")]}
 
-        human_readable_date = self._get_date_from_instruction(final_instruction)
+        human_readable_date = self._extract_period(final_instruction)
         print(f"Получена человекочитаемая дата: '{human_readable_date}'")
 
         date_info_for_prompt = f"Конкретный период запроса: {human_readable_date}\n\n" if human_readable_date else ""
 
-        sys_msg_content = self.prompt_comment_sql_query
+        sys_msg_content = self.prompt_generate_final_response_prompt
         human_msg_content = (
             f"Вопрос пользователя:\n{final_instruction}\n\n"
             f"{date_info_for_prompt}"  # <-- Используем новую переменную
@@ -481,73 +497,47 @@ class GPTAgent:
     
 
     def _build_graph(self) -> StateGraph:
-        """
-        Собирает граф с маршрутизацией на основе намерения пользователя.
-        """
+        """Собирает граф с новой, более надежной цепочкой обработки."""
         workflow = StateGraph(MessagesState)
 
-        # --- ШАГ 1: Добавляем все узлы, КРОМЕ маршрутизатора ---
         workflow.add_node("handle_greeting", self.handle_greeting)
         workflow.add_node("handle_chitchat", self.handle_chitchat)
-        workflow.add_node("check_relevance", self.check_relevance) 
         workflow.add_node("handle_irrelevant_question", self.handle_irrelevant_question)
-        workflow.add_node("validate_db_query", self.validate_db_query)
-        workflow.add_node("get_keys", self.get_keys)
-        workflow.add_node("generate_sql_query", self.generate_sql_query)
-        workflow.add_node("comment_sql_query", self.comment_sql_query)
+        workflow.add_node("extract_data", self.extract_data)
+        workflow.add_node("build_sql_query", self.build_sql_query)
+        workflow.add_node("generate_final_response", self.generate_final_response)
         
-        # --- ШАГ 2: Устанавливаем точку входа ---
-        # Точка входа по-прежнему определяет базовое намерение
         workflow.set_conditional_entry_point(
-            self.route_request,
+            self.detect_intent,
             {
                 "greeting": "handle_greeting",
                 "chitchat": "handle_chitchat",
-                "database_question": "check_relevance" 
+                "database_question": "extract_data", 
+                "irrelevant_question": "handle_irrelevant_question"
             }
         )
         
-        # --- ШАГ 3: Определяем связи от конечных точек веток ---
-        
-        # Ветки "болтовни" сразу заканчиваются
         workflow.add_edge("handle_greeting", END)
         workflow.add_edge("handle_chitchat", END)
-        workflow.add_edge("handle_irrelevant_question", END) # Новая конечная ветка
-
-        def route_after_relevance(state: MessagesState) -> str:
-            """Читает решение из состояния и возвращает название следующего узла."""
-            return state.get("relevance_decision", "proceed")
-
-        workflow.add_conditional_edges(
-            "check_relevance",          # Начинаем с этого узла
-            route_after_relevance,      # Используем эту функцию для принятия решения
-            {
-                "proceed": "validate_db_query",
-                "irrelevant": "handle_irrelevant_question"
-            }
-        )
+        workflow.add_edge("handle_irrelevant_question", END)
         
-        # Ветка валидации имеет свое собственное ветвление
-        def route_after_validation(state: MessagesState):
+        def route_after_extraction(state: MessagesState):
             return "clarify" if state.get("needs_clarification") else "proceed"
 
         workflow.add_conditional_edges(
-            "validate_db_query",
-            route_after_validation,
+            "extract_data",  
+            route_after_extraction,
             {
-                "clarify": END, # Если нужны уточнения, завершаем
-                "proceed": "get_keys" # Если все ок, идем дальше по основной цепочке
+                "clarify": END, 
+                "proceed": "build_sql_query" 
             }
         )
 
-        # --- ШАГ 4: Собираем основную цепочку для SQL-запроса ---
-        workflow.add_edge("get_keys", "generate_sql_query")
-        workflow.add_edge("generate_sql_query", "comment_sql_query")
-        workflow.add_edge("comment_sql_query", END)
-        
+        workflow.add_edge("build_sql_query", "generate_final_response")
+        workflow.add_edge("generate_final_response", END)
+
         return workflow
 
-    # --- Функция для запуска диалога ---
     def run(self, user_id: str, message: str, report_id: Optional[str] = "default_report") -> Optional[Dict]:
         thread_id = f"user_{user_id}_{report_id}"
         config = {"configurable": {"thread_id": thread_id}}
